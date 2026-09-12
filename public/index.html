@@ -454,6 +454,14 @@ function init() {
     montarPicker();
   }
 }
+// a trava de papel e o filtro de chamados novos comparam horários com o relógio do
+// SERVIDOR; espera o offset chegar (ou 2s, se estiver sem conexão) antes de decidir
+function iniciarQuandoSouberAHora() {
+  let iniciou = false;
+  const ir = () => { if (!iniciou) { iniciou = true; init(); } };
+  db.ref('.info/serverTimeOffset').once('value', ir);
+  setTimeout(ir, 2000);
+}
 
 // ---------------- trava de papel: UMA tela por papel ----------------
 // Vale pra TV da recepção e pra cada sala. Regra: QUEM JÁ ESTÁ ATIVA FICA. Uma segunda
@@ -485,19 +493,23 @@ function travaDePapel(ref, aoMudar) {
   let ativa = false;
   let decidiu = false; // "assumo ou bloqueio" é decidido UMA vez, na carga
   let batimento = null;
+  function gravar() { ref.set({ id: meuId, ts: firebase.database.ServerValue.TIMESTAMP }); }
   function assumir() {
     ativa = true;
-    ref.set({ id: meuId, ts: firebase.database.ServerValue.TIMESTAMP });
+    gravar();
     ref.onDisconnect().remove();
-    if (!batimento) {
-      batimento = setInterval(() => {
-        if (ativa) ref.update({ ts: firebase.database.ServerValue.TIMESTAMP });
-      }, BATIMENTO_MS);
-    }
+    clearInterval(batimento);
+    batimento = setInterval(() => { if (ativa) gravar(); }, BATIMENTO_MS);
     aoMudar(true, null);
   }
   function bloquear(val) {
     ativa = false;
+    clearInterval(batimento);
+    batimento = null;
+    // sem isso, quando esta tela (já bloqueada) fechasse, o onDisconnect registrado
+    // enquanto era ativa apagaria o registro de quem assumiu — e a próxima tela a
+    // abrir acharia o papel livre: duas ativas ao mesmo tempo
+    ref.onDisconnect().cancel();
     aoMudar(false, val);
   }
   function outraViva(val) {
@@ -553,8 +565,12 @@ function vigiarVersao(podeRecarregar) {
     if (!(typeof v === 'number' && v > VERSAO)) return;
     if (timer) return;
     const tentar = () => {
-      if (podeRecarregar()) { location.reload(); return; }
-      timer = setTimeout(tentar, 3000);
+      if (!podeRecarregar()) { timer = setTimeout(tentar, 3000); return; }
+      let jaTentou = null;
+      try { jaTentou = sessionStorage.getItem('recarga_versao'); } catch (e) {}
+      if (jaTentou === String(v)) return; // já recarregou por esta versão e continuou velho: não entra em loop
+      try { sessionStorage.setItem('recarga_versao', String(v)); } catch (e) {}
+      location.reload();
     };
     tentar();
   });
@@ -611,13 +627,12 @@ function iniciarCaller(sala) {
     }
   });
 
+  // recarrega em vez de trocar de view: iniciarCaller() registra listeners e atalhos
+  // (Enter, "falando") que continuariam vivos e agindo pela sala antiga
   function sairDaSala() {
-    historicoSalaRef.off();
     travaSala.parar();
-    esconderBloqueio();
     localStorage.removeItem('papel_tela');
-    mostrarView('picker');
-    montarPicker();
+    location.reload();
   }
   document.getElementById('trocarSalaCaller').onclick = () => {
     if (!confirm('Trocar a sala desta tela?')) return;
@@ -714,9 +729,22 @@ function iniciarRecepcao() {
   // SÓ UMA recepção fala (ver travaDePapel). Bloqueada = modo espelho: mostra os
   // chamados, não fala. Quem fala é a outra, até alguém clicar no aviso desta.
   let substituida = false;
+  let ativaFalando = false; // esta tela é quem controla painel/falando
+  const estadoRef = db.ref(DB.falando);
   const trava = travaDePapel(db.ref(DB.recepcaoAtiva), (ativa, outra) => {
     substituida = !ativa;
+    if (ativa && !ativaFalando) {
+      ativaFalando = true;
+      // limpa a trava ao assumir — se a TV recarregou no meio de uma fala, ninguém mais
+      // limparia aquele "true" e os consultórios ficariam travados; e se cair a energia
+      // no meio de uma fala, o Firebase zera sozinho ao detectar a desconexão
+      estadoRef.set(false);
+      estadoRef.onDisconnect().set(false);
+    }
     if (substituida) {
+      // espelho não mexe mais em painel/falando: se fechasse, zeraria a trava no meio
+      // da fala da recepção ativa
+      if (ativaFalando) { ativaFalando = false; estadoRef.onDisconnect().cancel(); }
       mostrarBloqueio('Outra tela está ativa como recepção',
         'Último sinal dela às ' + horaDe(outra && outra.ts) + '. Esta só espelha os chamados; quem fala é a outra.',
         trava.assumir, sairDaRecepcao);
@@ -728,14 +756,13 @@ function iniciarRecepcao() {
     }
   });
   function sairDaRecepcao() {
-    callsRef.off();
-    trava.parar();
-    esconderBloqueio();
     if (audioAtual) audioAtual.pause();
     if (window.speechSynthesis) speechSynthesis.cancel();
+    if (finalizarFalaAtual) finalizarFalaAtual();
+    trava.parar();
+    if (ativaFalando) estadoRef.onDisconnect().cancel();
     localStorage.removeItem('papel_tela');
-    mostrarView('picker');
-    montarPicker();
+    location.reload();
   }
 
   function atualizarBotaoMudo() {
@@ -767,7 +794,7 @@ function iniciarRecepcao() {
   atualizarRelogio();
   setInterval(atualizarRelogio, 30000);
 
-  statusEl.textContent = 'voz: padrão do navegador (' + VOZ_LANG + '), reserva /tts';
+  statusEl.textContent = 'voz: /tts (Google Orus), reserva: navegador (' + VOZ_LANG + ')';
   let utteranceAtual = null; // o Chrome perde onend/onerror se o objeto for coletado no meio
 
   function vozPreferida() {
@@ -863,6 +890,7 @@ function iniciarRecepcao() {
 
   let somLiberado = false;
   let comoLiberou = 'ainda não';
+  let ultimoBloqueio = ''; // registra o motivo uma vez, não a cada 10s
   function tentarLiberarAudio() {
     const audioEl = document.getElementById('keepAliveAudio');
     if (audioEl) {
@@ -871,7 +899,8 @@ function iniciarRecepcao() {
         // frequência) — o /tts, que é <audio>, vai tocar também. Esconde o overlay.
         if (!somLiberado) { comoLiberou = 'sozinho (sem clique)'; liberarSom(); }
       }).catch(err => {
-        diag('áudio de fundo bloqueado: ' + (err && err.name ? err.name : err));
+        const motivo = (err && err.name ? err.name : String(err));
+        if (motivo !== ultimoBloqueio) { ultimoBloqueio = motivo; diag('áudio de fundo bloqueado: ' + motivo); }
       });
     }
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
@@ -904,15 +933,6 @@ function iniciarRecepcao() {
   function textoChamado(chamado) {
     return `Atenção, ${paraFala(chamado.nome)}. Comparecer ao ${paraFala(chamado.sala)}.`;
   }
-
-  const estadoRef = db.ref(DB.falando);
-  // limpa o estado ao carregar — se a TV foi recarregada no meio de uma fala, ninguém
-  // mais vai limpar aquele "true" preso e os consultórios ficariam travados pra sempre
-  estadoRef.set(false);
-  // e se a TV crashar/perder energia/fechar a aba NO MEIO de uma fala (sem dar tempo de
-  // rodar o set(false) acima na próxima carga), o Firebase libera sozinho quando detectar
-  // a desconexão — sem isso, todos os consultórios ficariam travados até alguém notar
-  estadoRef.onDisconnect().set(false);
 
   // cada etapa da fala vira um trecho na linha de diagnóstico (em vez de sobrescrever),
   // pra dar pra ver na TV onde exatamente uma chamada parou
@@ -986,7 +1006,7 @@ function iniciarRecepcao() {
           URL.revokeObjectURL(audio.src);
           finalizar();
         };
-        audio.onerror = () => aoFalhar('áudio do /tts não tocou');
+        audio.onerror = () => { URL.revokeObjectURL(audio.src); aoFalhar('áudio do /tts não tocou'); };
         audio.play()
           .then(() => diag('tocando /tts (Orus) após ' + (Date.now() - t0) + 'ms (som liberado: ' + comoLiberou + ')'))
           .catch(err => aoFalhar('play() do áudio falhou: ' + (err && err.name ? err.name : err)));
@@ -1054,7 +1074,9 @@ function iniciarRecepcao() {
   // NÃO ler o caminho antigo (calls/): uma recepção velha esquecida escuta ele, e as
   // duas falariam juntas o chamado de um consultório que ainda não recarregou. Esse
   // consultório precisa de UM F5 — as próximas atualizações são automáticas.
-  const callsRef = db.ref(DB.chamadas).orderByChild('ts').startAt(Date.now());
+  // hora do SERVIDOR: com o relógio do PC adiantado, chamados novos nunca chegariam;
+  // atrasado, chamados velhos seriam falados de novo a cada carga da TV
+  const callsRef = db.ref(DB.chamadas).orderByChild('ts').startAt(agoraServidor());
   callsRef.on('child_added', receberChamado);
 
   vigiarVersao(() => !processando && filaChamados.length === 0);
@@ -1071,7 +1093,7 @@ function iniciarRecepcao() {
   };
 }
 
-init();
+iniciarQuandoSouberAHora();
 </script>
 </body>
 </html>

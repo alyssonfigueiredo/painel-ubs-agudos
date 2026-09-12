@@ -9,8 +9,10 @@ const versao = Date.now();
 writeFileSync('public/versao.js', `window.VERSAO_DEPLOY = ${versao};\n`);
 console.log(`versao.js gerado: VERSAO_DEPLOY = ${versao} (${new Date(versao).toLocaleString('pt-BR')})`);
 
-const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-const r = spawnSync(npx, ['wrangler', 'deploy', ...process.argv.slice(2)], { stdio: 'inherit' });
+// comando em string única com shell: no Windows, spawn de npx.cmd sem shell dá EINVAL
+// (Node >= 18.20); string sem array de args não dispara o aviso DEP0190
+const extra = process.argv.slice(2).map(a => /[\s"]/.test(a) ? JSON.stringify(a) : a).join(' ');
+const r = spawnSync('npx wrangler deploy' + (extra ? ' ' + extra : ''), { stdio: 'inherit', shell: true });
 if (r.status !== 0) process.exit(r.status ?? 1);
 
 // Avisa as telas abertas na hora: grava a versão nova em painel/versao. Sem isso, a
