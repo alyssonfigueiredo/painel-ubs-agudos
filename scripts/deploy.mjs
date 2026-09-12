@@ -9,7 +9,8 @@ const versao = Date.now();
 writeFileSync('public/versao.js', `window.VERSAO_DEPLOY = ${versao};\n`);
 console.log(`versao.js gerado: VERSAO_DEPLOY = ${versao} (${new Date(versao).toLocaleString('pt-BR')})`);
 
-const r = spawnSync('npx', ['wrangler', 'deploy', ...process.argv.slice(2)], { stdio: 'inherit', shell: true });
+const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+const r = spawnSync(npx, ['wrangler', 'deploy', ...process.argv.slice(2)], { stdio: 'inherit' });
 if (r.status !== 0) process.exit(r.status ?? 1);
 
 // Avisa as telas abertas na hora: grava a versão nova em painel/versao. Sem isso, a
