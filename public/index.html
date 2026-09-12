@@ -945,7 +945,7 @@ function iniciarRecepcao() {
         });
     }
 
-    // principal: voz do navegador (ver VOZ_PREFERIDA); reserva: /tts
+    // principal: voz padrão do navegador (ver VOZ_LANG); reserva: /tts
     falarComNavegador(texto, finalizar, motivo => {
       diag(motivo + ' — usando /tts');
       tocarTts();
