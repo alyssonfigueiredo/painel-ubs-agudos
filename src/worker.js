@@ -12,7 +12,20 @@ const TTS_VOZ = 'pt-BR-Chirp3-HD-Orus';
 const TTS_MAX_CHARS = 200;
 const TTS_CACHE_SECONDS = 60 * 60 * 24 * 30;
 
+// LIMPEZA: todo dia às 18h (horário de Brasília) apaga TODOS os chamados do banco —
+// nome de paciente não fica guardado além do dia. Agendado em wrangler.jsonc
+// (triggers.crons, em UTC: 21:00). As telas abertas escutam child_removed e limpam
+// a lista sozinhas. Teste manual: npx wrangler dev --test-scheduled e abrir
+// http://localhost:8787/__scheduled
+const DB_CHAMADAS = 'https://painel-ubs-c7992-default-rtdb.firebaseio.com/chamadas.json';
+
 export default {
+  async scheduled(event, env, ctx) {
+    const res = await fetch(DB_CHAMADAS, { method: 'DELETE' });
+    if (!res.ok) throw new Error('limpeza de chamadas falhou: ' + res.status + ' ' + (await res.text()).slice(0, 200));
+    console.log('limpeza diária: chamadas/ apagado');
+  },
+
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname === '/tts') return tts(url, env, ctx);
