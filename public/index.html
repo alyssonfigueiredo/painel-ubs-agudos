@@ -397,7 +397,7 @@ const REPETICOES_CHAMADO = 2; // quantas vezes a recepção anuncia cada chamado
 // número em painel/versao, e toda tela aberta com número menor recarrega sozinha
 // (consultório na hora; recepção quando não estiver falando). Sem isso, uma aba
 // esquecida em outro PC roda código velho pra sempre.
-const VERSAO = 9;
+const VERSAO = 10;
 
 // Caminhos no banco. RENOMEADOS de propósito em relação às versões antigas (calls/ e
 // estado/): uma recepção antiga esquecida aberta em outro PC — de qualquer versão, até
@@ -773,12 +773,29 @@ function iniciarRecepcao() {
       speechSynthesis.cancel();
       aoFalhar('voz do navegador não começou em 5s');
     }, 5000);
-    u.onstart = () => { comecou = true; clearTimeout(guarda); diag('falando com a voz do navegador' + (u.voice ? ' (' + u.voice.name + ')' : '')); };
-    u.onend = () => { if (comecou && !falhou) aoTerminar(); };
+    // o Chrome às vezes NÃO dispara onend (bug antigo) — aí a trava dos consultórios
+    // ficaria presa até o timeout de 15s. Vigia speechSynthesis.speaking como garantia.
+    let terminado = false;
+    let vigia = null;
+    function terminar() {
+      if (terminado) return;
+      terminado = true;
+      clearInterval(vigia);
+      aoTerminar();
+    }
+    u.onstart = () => {
+      comecou = true;
+      clearTimeout(guarda);
+      diag('falando com a voz do navegador' + (u.voice ? ' (' + u.voice.name + ')' : ' (padrão do sistema)'));
+      vigia = setInterval(() => {
+        if (!speechSynthesis.speaking && !speechSynthesis.pending) { diag('fim detectado pelo vigia'); terminar(); }
+      }, 300);
+    };
+    u.onend = () => { if (comecou && !falhou) terminar(); };
     u.onerror = e => {
       clearTimeout(guarda);
       if (falhou) return;
-      if (e.error === 'interrupted' || e.error === 'canceled') { if (comecou) aoTerminar(); return; }
+      if (e.error === 'interrupted' || e.error === 'canceled') { if (comecou) terminar(); return; }
       falhou = true;
       aoFalhar('voz do navegador: ' + e.error);
     };
