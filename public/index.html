@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UBS Francisca de Oliveira Silva — Painel de Chamada</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0f2b26;
+    --card: #17352e;
+    --card-2: #1d4038;
+    --line: rgba(255,255,255,0.08);
+    --text: #f3f2ec;
+    --text-dim: #93a8a2;
+    --coral: #e8917a;
+    --yellow: #f2cf5b;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', Arial, sans-serif;
+  }
+  h1,h2 { font-family: 'Manrope', Arial, sans-serif; }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  /* ---------- picker ---------- */
+  #view-picker.active {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .picker-card {
+    background: linear-gradient(180deg, var(--card-2), var(--card));
+    border: 1px solid var(--line);
+    border-radius: 28px;
+    padding: 48px;
+    width: 100%;
+    max-width: 460px;
+    margin: 24px;
+  }
+  .sub { color: var(--coral); font-weight: 700; letter-spacing: 0.1em; font-size: 13px; margin-bottom: 6px; }
+  .picker-card h1 { font-size: 26px; font-weight: 800; margin: 0 0 28px; }
+  .sala-btn {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid var(--line);
+    text-align: left;
+    padding: 16px 18px;
+    font-weight: 600;
+    font-size: 16px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .sala-btn:active { background: var(--card-2); }
+  .recepcao-btn {
+    margin-top: 22px;
+    border-top: 1px solid var(--line);
+    padding-top: 22px;
+  }
+  .recepcao-btn button {
+    background: var(--coral);
+    color: #21140f;
+    border: none;
+    width: 100%;
+    padding: 16px 18px;
+    font-weight: 700;
+    font-size: 16px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  /* ---------- caller (sala) ---------- */
+  #view-caller.active {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card {
+    background: linear-gradient(180deg, var(--card-2), var(--card));
+    border: 1px solid var(--line);
+    border-radius: 28px;
+    padding: 48px;
+    width: 100%;
+    max-width: 460px;
+    margin: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .card::before{
+    content:"";
+    position:absolute; inset:0 auto 0 0;
+    width:6px;
+    background: var(--yellow);
+    opacity:.7;
+  }
+  input[type=text] {
+    width: 100%;
+    font-size: 18px;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    margin-bottom: 16px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: inherit;
+  }
+  input[type=text]::placeholder { color: var(--text-dim); }
+  input[type=text]:focus { outline: none; border-color: var(--coral); }
+  button.primary {
+    width: 100%;
+    font-size: 18px;
+    font-weight: 700;
+    padding: 14px;
+    background: var(--coral);
+    color: #21140f;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button.primary:active { opacity: 0.85; }
+  .feedback {
+    text-align: center;
+    margin-top: 14px;
+    font-size: 14px;
+    color: var(--yellow);
+    height: 18px;
+  }
+  .trocar-btn {
+    display: block;
+    width: 100%;
+    margin-top: 18px;
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--line);
+    padding: 12px 16px;
+    font-weight: 600;
+    font-size: 14px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .trocar-btn:active { background: var(--card); }
+  .hist-sala { margin-top: 20px; }
+  .hist-sala .hist-titulo { color: var(--text-dim); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .hist-sala-item {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 8px 2px; border-bottom: 1px solid var(--line); font-size: 14px;
+  }
+  .hist-sala-item:last-child { border-bottom: none; }
+  .hist-sala-item .h-nome { font-weight: 600; }
+  .hist-sala-item .h-hora { color: var(--text-dim); font-size: 12px; }
+
+  /* ---------- recepcao ---------- */
+  .page { max-width: 1400px; margin: 0 auto; padding: 40px 48px; }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 32px;
+  }
+  .brand h1 { font-size: 30px; font-weight: 800; margin: 0 0 4px; }
+  .brand .sub2 { color: var(--text-dim); font-size: 14px; letter-spacing: 0.08em; }
+  .clock { text-align: right; }
+  .clock .time { font-size: 40px; font-weight: 800; line-height: 1; }
+  .clock .date { color: var(--text-dim); font-size: 14px; margin-top: 6px; text-transform: capitalize; }
+  .grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 28px; align-items: start; }
+  .main-card {
+    background: linear-gradient(180deg, var(--card-2), var(--card));
+    border: 1px solid var(--line);
+    border-radius: 28px;
+    padding: 56px;
+    min-height: 480px;
+    position: relative;
+    overflow: hidden;
+  }
+  .main-card::before{
+    content:"";
+    position:absolute; inset:0 auto 0 0;
+    width:6px;
+    background: var(--yellow);
+    opacity:.7;
+  }
+  .label { color: var(--coral); font-weight: 700; letter-spacing: 0.1em; font-size: 15px; margin-bottom: 18px; }
+  .patient-name { font-size: 68px; font-weight: 800; line-height: 1.05; margin: 0 0 14px; word-break: break-word; }
+  .patient-name.empty { color: var(--text-dim); font-size: 42px; }
+  .room { font-size: 40px; color: var(--text-dim); font-weight: 700; }
+  .bar { width: 64px; height: 5px; background: var(--yellow); border-radius: 3px; margin-top: 32px; }
+  .repetir-btn {
+    margin-top: 28px;
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--line);
+    padding: 12px 20px;
+    font-weight: 600;
+    font-size: 14px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .repetir-btn:disabled { opacity: .35; cursor: default; }
+  .repetir-btn:not(:disabled):hover { border-color: var(--coral); color: var(--text); }
+  .side-title { color: var(--text-dim); font-size: 14px; font-weight: 700; letter-spacing: 0.1em; margin: 0 0 16px 4px; }
+  .history { display: flex; flex-direction: column; gap: 10px; }
+  .history-item { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; }
+  .history-item .nome { font-weight: 800; font-size: 28px; line-height: 1.15; word-break: break-word; }
+  .history-item .sala { color: var(--text-dim); font-size: 17px; margin-top: 4px; }
+  .empty-hist { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px 20px; color: var(--text-dim); text-align: center; font-size: 14px; }
+
+  #overlay {
+    position: fixed; inset: 0;
+    background: rgba(6,18,16,0.92);
+    display: flex; align-items:center; justify-content:center; flex-direction:column;
+    z-index: 999; cursor: pointer; text-align:center; padding: 20px;
+  }
+  #overlay h2 { font-size: 26px; margin-bottom: 10px; }
+  #overlay p { color: var(--text-dim); }
+  #status { position: fixed; bottom: 8px; right: 14px; font-size: 11px; color: var(--text-dim); opacity:.6; }
+  #diagnostico { position: fixed; bottom: 26px; right: 14px; font-size: 11px; color: var(--yellow); max-width: 340px; text-align: right; }
+  #trocarSalaRecepcao {
+    position: fixed; bottom: 8px; left: 14px;
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--line);
+    padding: 6px 12px;
+    font-size: 11px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    opacity: .6;
+  }
+  #trocarSalaRecepcao:hover { opacity: 1; }
+
+  .mudo-btn {
+    margin-top: 14px;
+    background: var(--card);
+    color: var(--text);
+    border: 2px solid var(--yellow);
+    padding: 12px 20px;
+    font-weight: 800;
+    font-size: 14px;
+    border-radius: 14px;
+    cursor: pointer;
+    font-family: inherit;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.35);
+  }
+  .mudo-btn:hover { border-color: var(--text); }
+  .mudo-btn.mudo-ativo {
+    background: #7a1f1f;
+    border-color: #ff6b6b;
+    color: #ffe9e9;
+    animation: piscaMudo 1.4s infinite;
+  }
+  @keyframes piscaMudo {
+    0%, 100% { box-shadow: 0 4px 18px rgba(255,107,107,0.15); }
+    50% { box-shadow: 0 4px 28px rgba(255,107,107,0.65); }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ PICKER (escolha de papel, uma vez por PC) ============ -->
+<div id="view-picker" class="view">
+  <div class="picker-card">
+    <div class="sub">UBS FRANCISCA DE OLIVEIRA SILVA</div>
+    <h1>Qual é o papel desta tela?</h1>
+    <div id="salaButtons"></div>
+    <div class="recepcao-btn">
+      <button id="btnRecepcao">🖥 Esta é a TV da recepção</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ CALLER (dentro de um consultório) ============ -->
+<div id="view-caller" class="view">
+  <div class="card">
+    <div class="sub">PAINEL DE CHAMADA</div>
+    <h1 id="salaAtual"></h1>
+    <input type="text" id="nomePaciente" placeholder="Nome do paciente" autocomplete="off">
+    <button class="primary" id="btnChamar">Chamar</button>
+    <div class="feedback" id="feedback"></div>
+    <div class="hist-sala" id="historicoSala"></div>
+    <button class="trocar-btn" id="trocarSalaCaller">🔄 Trocar sala</button>
+  </div>
+</div>
+
+<!-- ============ RECEPÇÃO (espelho na TV) ============ -->
+<div id="view-recepcao" class="view">
+  <audio id="keepAliveAudio" loop preload="auto" src="data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA=="></audio>
+  <div id="overlay">
+    <h2>Clique aqui para ativar o som</h2>
+    <p>Necessário uma vez para o navegador liberar a fala em voz alta.</p>
+  </div>
+  <div class="page">
+    <header>
+      <div class="brand">
+        <h1>UBS Francisca de Oliveira Silva</h1>
+        <div class="sub2">PAINEL DE CHAMADA</div>
+      </div>
+      <div class="clock">
+        <div class="time" id="hora">--:--</div>
+        <div class="date" id="data"></div>
+        <button id="btnMudo" class="mudo-btn">🔊 Silenciar voz</button>
+      </div>
+    </header>
+    <div class="grid">
+      <div class="main-card">
+        <div class="label">CHAMANDO</div>
+        <div class="patient-name empty" id="chamandoNome">Aguardando chamada</div>
+        <div class="room" id="chamandoSala"></div>
+        <div class="bar"></div>
+        <button id="btnRepetir" class="repetir-btn" disabled>🔁 Repetir chamada</button>
+      </div>
+      <div>
+        <div class="side-title">ÚLTIMOS CHAMADOS</div>
+        <div class="history" id="historico">
+          <div class="empty-hist">Sem chamados anteriores.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="status"></div>
+  <div id="diagnostico"></div>
+  <button id="trocarSalaRecepcao">🔄 trocar papel desta tela</button>
+</div>
+
+<script>
+// ===================== CONFIGURAÇÃO =====================
+const firebaseConfig = {
+  apiKey: "AIzaSyCWqkLR3gH48VOrBQuDfg_UOJx0nlATeRs",
+  authDomain: "painel-ubs-c7992.firebaseapp.com",
+  databaseURL: "https://painel-ubs-c7992-default-rtdb.firebaseio.com",
+  projectId: "painel-ubs-c7992",
+  storageBucket: "painel-ubs-c7992.firebasestorage.app",
+  messagingSenderId: "872483474831",
+  appId: "1:872483474831:web:c4cdf18ff71064f772cffa"
+};
+
+const SALAS = [
+  "Consultório 01",
+  "Consultório 02",
+  "Consultório 03",
+  "Consultório 04",
+  "Odontologia",
+  "Nutrição",
+  "Enfermagem",
+  "Triagem",
+  "Sala de Vacina",
+  "Sala de Medicação"
+];
+const MAX_HISTORICO = 6;
+// ==========================================================
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+const views = {
+  picker: document.getElementById('view-picker'),
+  caller: document.getElementById('view-caller'),
+  recepcao: document.getElementById('view-recepcao')
+};
+
+function mostrarView(nome) {
+  Object.values(views).forEach(v => v.classList.remove('active'));
+  views[nome].classList.add('active');
+}
+
+// ---------------- roteamento por papel salvo neste PC ----------------
+function init() {
+  const papel = localStorage.getItem('papel_tela'); // 'recepcao' ou nome de uma sala
+  if (papel === 'recepcao') {
+    mostrarView('recepcao');
+    iniciarRecepcao();
+  } else if (papel && SALAS.includes(papel)) {
+    mostrarView('caller');
+    iniciarCaller(papel);
+  } else {
+    mostrarView('picker');
+    montarPicker();
+  }
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+function montarPicker() {
+  const salaButtonsEl = document.getElementById('salaButtons');
+  salaButtonsEl.innerHTML = '';
+  SALAS.forEach(sala => {
+    const btn = document.createElement('button');
+    btn.textContent = sala;
+    btn.className = 'sala-btn';
+    btn.onclick = () => {
+      localStorage.setItem('papel_tela', sala);
+      mostrarView('caller');
+      iniciarCaller(sala);
+    };
+    salaButtonsEl.appendChild(btn);
+  });
+  document.getElementById('btnRecepcao').onclick = () => {
+    localStorage.setItem('papel_tela', 'recepcao');
+    mostrarView('recepcao');
+    iniciarRecepcao();
+  };
+}
+
+// ---------------- painel do consultório ----------------
+function iniciarCaller(sala) {
+  document.getElementById('salaAtual').textContent = sala;
+  const inputEl = document.getElementById('nomePaciente');
+  const feedbackEl = document.getElementById('feedback');
+  const btnChamarEl = document.getElementById('btnChamar');
+  inputEl.focus();
+
+  document.getElementById('trocarSalaCaller').onclick = () => {
+    if (!confirm('Trocar a sala desta tela?')) return;
+    historicoSalaRef.off();
+    localStorage.removeItem('papel_tela');
+    mostrarView('picker');
+    montarPicker();
+  };
+
+  // últimos chamados feitos por ESTA sala — usa o índice de "ts" que já existe, e
+  // filtra por sala no cliente (evita precisar de outro índice novo no banco)
+  const historicoSalaEl = document.getElementById('historicoSala');
+  const MAX_HISTORICO_SALA = 4;
+  let historicoSala = [];
+  function renderHistoricoSala() {
+    if (historicoSala.length === 0) { historicoSalaEl.innerHTML = ''; return; }
+    historicoSalaEl.innerHTML =
+      '<div class="hist-titulo">ÚLTIMOS CHAMADOS DESTA SALA</div>' +
+      historicoSala.map(h => {
+        const hora = h.ts ? new Date(h.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+        return `<div class="hist-sala-item"><span class="h-nome">${escapeHtml(h.nome)}</span><span class="h-hora">${escapeHtml(hora)}</span></div>`;
+      }).join('');
+  }
+  const historicoSalaRef = db.ref('calls').orderByChild('ts').limitToLast(50);
+  historicoSalaRef.on('child_added', snap => {
+    const val = snap.val();
+    if (!val || val.sala !== sala) return;
+    historicoSala.unshift(val);
+    historicoSala = historicoSala.slice(0, MAX_HISTORICO_SALA);
+    renderHistoricoSala();
+  });
+
+  // bloqueia o botão Chamar enquanto a recepção estiver anunciando outro chamado —
+  // impede que 2 chamados se sobreponham na fala
+  let ocupado = false;
+  db.ref('estado/falando').on('value', snap => {
+    ocupado = !!snap.val();
+    btnChamarEl.disabled = ocupado;
+    btnChamarEl.textContent = ocupado ? 'Aguarde...' : 'Chamar';
+    if (ocupado) {
+      feedbackEl.style.color = '';
+      feedbackEl.textContent = 'Aguarde, chamada em andamento na recepção...';
+    } else if (feedbackEl.textContent === 'Aguarde, chamada em andamento na recepção...') {
+      feedbackEl.textContent = '';
+    }
+  });
+
+  function chamar() {
+    if (ocupado) return;
+    const nome = inputEl.value.trim();
+    if (!nome) { inputEl.focus(); return; }
+    db.ref('calls').push({
+      sala: sala,
+      nome: nome.toUpperCase(),
+      ts: firebase.database.ServerValue.TIMESTAMP
+    }).then(() => {
+      feedbackEl.style.color = '';
+      feedbackEl.textContent = 'Chamado enviado.';
+      setTimeout(() => { if (!ocupado) feedbackEl.textContent = ''; }, 2000);
+    }).catch(err => {
+      feedbackEl.style.color = '#ff8a80';
+      feedbackEl.textContent = 'Erro ao enviar: ' + err.message;
+    });
+    inputEl.value = '';
+    inputEl.focus();
+  }
+
+  btnChamarEl.onclick = chamar;
+  inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') chamar(); });
+}
+
+// ---------------- painel da recepção ----------------
+function iniciarRecepcao() {
+  const overlay = document.getElementById('overlay');
+  const chamandoNomeEl = document.getElementById('chamandoNome');
+  const chamandoSalaEl = document.getElementById('chamandoSala');
+  const historicoEl = document.getElementById('historico');
+  const statusEl = document.getElementById('status');
+  const diagnosticoEl = document.getElementById('diagnostico');
+  const horaEl = document.getElementById('hora');
+  const dataEl = document.getElementById('data');
+  const btnRepetir = document.getElementById('btnRepetir');
+  const btnMudo = document.getElementById('btnMudo');
+
+  let filaChamados = [];
+  let processando = false;
+  let historico = [];
+  let audioAtual = null; // Audio() da fala em andamento, pra dar pause() se mutar no meio
+  let finalizarFalaAtual = null; // libera a trava estado/falando — pause() sozinho NÃO dispara onended/onerror
+  let ultimoChamado = null;
+  let mudo = localStorage.getItem('painel_mudo') === '1';
+
+  function atualizarBotaoMudo() {
+    btnMudo.textContent = mudo ? '🔇 Som desligado — clique pra reativar' : '🔊 Silenciar voz';
+    btnMudo.classList.toggle('mudo-ativo', mudo);
+  }
+  atualizarBotaoMudo();
+
+  // botão de emergência: corta a voz na hora (mesmo com uma fala em andamento) e
+  // impede qualquer sala de ficar travada esperando áudio que não vai tocar
+  btnMudo.onclick = () => {
+    mudo = !mudo;
+    localStorage.setItem('painel_mudo', mudo ? '1' : '0');
+    if (mudo) {
+      if (audioAtual) audioAtual.pause();
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+      // pause()/cancel() não disparam onended/onerror sozinhos — sem chamar isso aqui, a
+      // trava estado/falando ficaria presa até o timeout de 15s toda vez que mutar no meio
+      if (finalizarFalaAtual) finalizarFalaAtual();
+    }
+    atualizarBotaoMudo();
+  };
+
+  function atualizarRelogio() {
+    const agora = new Date();
+    horaEl.textContent = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    dataEl.textContent = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+  }
+  atualizarRelogio();
+  setInterval(atualizarRelogio, 30000);
+
+  statusEl.textContent = 'voz: /tts (Google Tradutor via Worker) + reserva do navegador';
+
+  setInterval(() => { tentarLiberarAudio(); }, 10000);
+
+  // 2ª camada de "manter vivo": um AudioContext tocando um tom INAUDÍVEL (ganho zero)
+  // continuamente — é o sinal que mais navegadores usam pra considerar a aba "produzindo
+  // áudio de verdade" (mais forte que só a tag <audio>, que pode ter o autoplay bloqueado
+  // silenciosamente do mesmo jeito). Os dois juntos cobrem navegadores diferentes.
+  let audioCtx = null;
+  function iniciarAudioContextSilencioso() {
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      gain.gain.value = 0; // inaudível de propósito
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start();
+    } catch (e) {
+      diagnosticoEl.textContent = 'audioctx falhou: ' + e.message;
+    }
+  }
+
+  function tentarLiberarAudio() {
+    const audioEl = document.getElementById('keepAliveAudio');
+    if (audioEl) {
+      audioEl.play().catch(err => {
+        diagnosticoEl.textContent = 'áudio de fundo bloqueado: ' + (err && err.name ? err.name : err);
+      });
+    }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+  }
+
+  overlay.onclick = () => {
+    // toca um áudio SILENCIOSO em loop desde já (mesmo gesto de clique) e deixa rodando
+    // o dia inteiro — estabelece a aba como "produzindo áudio" pro Chrome, o que a política
+    // de autoplay de <audio> aceita mesmo sem gesto recente (diferente do speechSynthesis,
+    // que expira a liberação poucos segundos após o último clique — foi o que causava
+    // "só funciona clicando Repetir na tela": confirmado com foco/visibilidade/áudio de
+    // fundo todos OK e mesmo assim mudo, então a troca aqui é pra áudio real via rede,
+    // que segue a política mais permissiva de <audio>/<video>)
+    iniciarAudioContextSilencioso();
+    tentarLiberarAudio();
+    overlay.style.display = 'none';
+  };
+
+  function textoChamado(chamado) {
+    return `Atenção, ${chamado.nome}. Comparecer ao ${chamado.sala}.`;
+  }
+
+  // RESERVA: se o áudio de rede falhar (internet da UBS caiu, Worker fora do ar, Google
+  // bloqueou), tenta a voz do próprio navegador. O Chrome pode segurar essa fala se não
+  // houve clique recente — mas é melhor que silêncio, e o timeout de 15s libera a trava.
+  function falarComNavegador(texto, onend) {
+    if (!('speechSynthesis' in window)) { onend(); return; }
+    try {
+      const u = new SpeechSynthesisUtterance(texto);
+      u.lang = 'pt-BR';
+      u.rate = 0.95;
+      u.onend = onend;
+      u.onerror = onend;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    } catch (e) {
+      onend();
+    }
+  }
+
+  const estadoRef = db.ref('estado/falando');
+  // limpa o estado ao carregar — se a TV foi recarregada no meio de uma fala, ninguém
+  // mais vai limpar aquele "true" preso e os consultórios ficariam travados pra sempre
+  estadoRef.set(false);
+  // e se a TV crashar/perder energia/fechar a aba NO MEIO de uma fala (sem dar tempo de
+  // rodar o set(false) acima na próxima carga), o Firebase libera sozinho quando detectar
+  // a desconexão — sem isso, todos os consultórios ficariam travados até alguém notar
+  estadoRef.onDisconnect().set(false);
+
+  function falar(texto, onend) {
+    if (mudo) { onend(); return; } // silenciado: não fala e não trava nenhuma sala
+    const audioElDiag = document.getElementById('keepAliveAudio');
+    diagnosticoEl.textContent = `[${new Date().toLocaleTimeString('pt-BR')}] falando "${texto.slice(0,30)}..." — foco=${document.hasFocus()} vis=${document.visibilityState} audioPausado=${audioElDiag ? audioElDiag.paused : 'sem-elemento'} audioCtx=${audioCtx ? audioCtx.state : 'nulo'}`;
+    let concluido = false;
+    function finalizar() {
+      if (concluido) return;
+      concluido = true;
+      clearTimeout(timeoutId);
+      estadoRef.set(false);
+      if (finalizarFalaAtual === finalizar) finalizarFalaAtual = null;
+      onend();
+    }
+    finalizarFalaAtual = finalizar;
+    // blinda contra falha de rede/carregamento travado — sem isso a trava de "falando"
+    // (e o botão Chamar dos consultórios) ficaria presa esperando um áudio que não chega
+    const timeoutId = setTimeout(finalizar, 15000);
+
+    // eleição atômica: se essa mesma tela (recepção) estiver aberta em 2 abas/PCs por
+    // engano, as duas recebem o mesmo chamado — sem isso, as duas falariam juntas,
+    // sobrepondo o áudio. Só quem vence a transação fala; a outra só sincroniza a tela.
+    estadoRef.transaction(atual => {
+      if (atual) return; // outra aba já assumiu este chamado — não disputa
+      return true;
+    }, (err, ganhou) => {
+      // se o timeout de 15s já desistiu (rede lenta) antes dessa resposta atrasada
+      // chegar, não pode falar agora — falaria um chamado velho por cima do próximo
+      if (concluido) return;
+      if (!ganhou) { finalizar(); return; }
+
+      // ÁUDIO REAL tocado por <audio>, servido pela NOSSA origem em /tts (src/worker.js
+      // busca o MP3 no Google Tradutor do lado do servidor). Não é speechSynthesis: o
+      // Chrome exige clique RECENTE (poucos segundos) pra liberar essa fala, mesmo com
+      // foco/aba visível/áudio de fundo tocando (confirmado em teste real), e por isso o
+      // chamado remoto saía mudo. <audio>.play() segue a política de autoplay mais
+      // permissiva (Media Engagement Index), que o áudio de fundo já vinha alimentando.
+      // E não chamar o Google direto daqui: com Referer da nossa página ele responde erro
+      // em vez de MP3, e o <audio> dispara NotSupportedError no play().
+      const url = '/tts?q=' + encodeURIComponent(texto.slice(0, 200));
+      const audio = new Audio(url);
+      audioAtual = audio;
+      let reservaUsada = false; // onerror e play().catch podem disparar os dois pro mesmo erro
+      function usarReserva(motivo) {
+        if (reservaUsada || concluido) return;
+        reservaUsada = true;
+        diagnosticoEl.textContent = motivo + ' — tentando voz do navegador (' + new Date().toLocaleTimeString('pt-BR') + ')';
+        falarComNavegador(texto, finalizar);
+      }
+      audio.onended = finalizar;
+      audio.onerror = () => usarReserva('ERRO no áudio de rede (/tts) — verifique internet dessa tela');
+      audio.play().catch(err => usarReserva('play() do áudio falhou: ' + (err && err.name ? err.name : err)));
+    });
+  }
+
+  function processarFila() {
+    if (processando || filaChamados.length === 0) return;
+    processando = true;
+    const chamado = filaChamados.shift();
+
+    chamandoNomeEl.textContent = chamado.nome;
+    chamandoNomeEl.classList.remove('empty');
+    chamandoSalaEl.textContent = chamado.sala;
+    ultimoChamado = chamado;
+    btnRepetir.disabled = false;
+
+    historico.unshift(chamado);
+    historico = historico.slice(0, MAX_HISTORICO);
+    renderHistorico();
+
+    // fala apenas 1x automaticamente — repetição só por clique manual (botão "Repetir")
+    falar(textoChamado(chamado), () => {
+      processando = false;
+      processarFila();
+    });
+  }
+
+  function renderHistorico() {
+    if (historico.length === 0) {
+      historicoEl.innerHTML = '<div class="empty-hist">Sem chamados anteriores.</div>';
+      return;
+    }
+    // nome/sala vêm do banco (o médico digita, mas o banco não exige autenticação pra
+    // escrever) — nunca inserir sem escapar, senão vira injeção de HTML/script na TV
+    historicoEl.innerHTML = historico.map(h =>
+      `<div class="history-item"><div class="nome">${escapeHtml(h.nome)}</div><div class="sala">${escapeHtml(h.sala)}</div></div>`
+    ).join('');
+  }
+
+  const callsRef = db.ref('calls').orderByChild('ts').startAt(Date.now());
+  callsRef.on('child_added', snap => {
+    const val = snap.val();
+    if (!val || !val.nome || !val.sala) return;
+    filaChamados.push(val);
+    processarFila();
+  });
+
+  btnRepetir.onclick = () => {
+    if (!ultimoChamado || processando) return;
+    processando = true;
+    falar(textoChamado(ultimoChamado), () => { processando = false; processarFila(); });
+  };
+
+  document.getElementById('trocarSalaRecepcao').onclick = () => {
+    if (!confirm('Trocar o papel desta tela?')) return;
+    callsRef.off();
+    if (audioAtual) audioAtual.pause();
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    localStorage.removeItem('papel_tela');
+    mostrarView('picker');
+    montarPicker();
+  };
+}
+
+init();
+</script>
+</body>
+</html>
