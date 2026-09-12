@@ -385,7 +385,7 @@ const MAX_HISTORICO = 6;
 // número em painel/versao, e toda tela aberta com número menor recarrega sozinha
 // (consultório na hora; recepção quando não estiver falando). Sem isso, uma aba
 // esquecida em outro PC roda código velho pra sempre.
-const VERSAO = 4;
+const VERSAO = 5;
 
 // Caminhos no banco. RENOMEADOS de propósito em relação às versões antigas (calls/ e
 // estado/): uma recepção antiga esquecida aberta em outro PC — de qualquer versão, até
@@ -699,13 +699,14 @@ function iniciarRecepcao() {
   }
 
   let somLiberado = false;
+  let comoLiberou = 'ainda não';
   function tentarLiberarAudio() {
     const audioEl = document.getElementById('keepAliveAudio');
     if (audioEl) {
       audioEl.play().then(() => {
         // o navegador deixou tocar sem clique (Chrome libera pra sites que tocam som com
         // frequência) — então não precisa de ninguém clicando no overlay depois de um F5
-        if (!somLiberado) liberarSom();
+        if (!somLiberado) { comoLiberou = 'sozinho (sem clique)'; liberarSom(); }
       }).catch(err => {
         diagnosticoEl.textContent = 'áudio de fundo bloqueado: ' + (err && err.name ? err.name : err);
       });
@@ -732,7 +733,7 @@ function iniciarRecepcao() {
     });
     overlay.style.display = 'none';
   }
-  overlay.onclick = liberarSom;
+  overlay.onclick = () => { comoLiberou = 'clique'; liberarSom(); };
   tentarLiberarAudio();
 
   function textoChamado(chamado) {
@@ -819,12 +820,16 @@ function iniciarRecepcao() {
       diag(motivo + ' — tentando voz do navegador');
       falarComNavegador(texto, finalizar);
     }
-    audio.onended = () => { diag('terminou'); finalizar(); };
+    const t0 = Date.now();
+    audio.onended = () => {
+      diag('terminou em ' + (Date.now() - t0) + 'ms (duração=' + audio.duration.toFixed(1) + 's pos=' + audio.currentTime.toFixed(1) + 's)');
+      finalizar();
+    };
     audio.onerror = () => usarReserva('ERRO no áudio de rede (/tts) — verifique internet dessa tela');
     audio.src = url;
     audio.load();
     audio.play()
-      .then(() => diag('tocando (volume=' + audio.volume + ' muted=' + audio.muted + ')'))
+      .then(() => diag('tocando após ' + (Date.now() - t0) + 'ms (volume=' + audio.volume + ' muted=' + audio.muted + ' readyState=' + audio.readyState + ' som liberado: ' + comoLiberou + ')'))
       .catch(err => usarReserva('play() do áudio falhou: ' + (err && err.name ? err.name : err)));
   }
 
