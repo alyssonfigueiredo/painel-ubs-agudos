@@ -1,0 +1,2 @@
+Salve aqui o PNG do brasão (o arquivo original enviado, 783x645) com o nome brasao.png.
+O texto "Prefeitura Municipal" da parte de baixo é recortado por CSS na TV.

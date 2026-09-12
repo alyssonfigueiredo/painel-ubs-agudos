@@ -181,6 +181,10 @@
     border-bottom: 1px solid var(--line);
     margin-bottom: 32px;
   }
+  .brand { display: flex; align-items: center; gap: 22px; }
+  /* Brasão: o PNG original traz o texto "Prefeitura Municipal" embaixo; mostra só o topo (escudo + coroa + fita). */
+  .brasao { height: 92px; aspect-ratio: 783 / 500; overflow: hidden; flex: none; }
+  .brasao img { width: 100%; display: block; }
   .brand h1 { font-size: 30px; font-weight: 800; margin: 0 0 4px; }
   .brand .sub2 { color: var(--text-dim); font-size: 14px; letter-spacing: 0.08em; }
   .clock { text-align: right; }
@@ -348,8 +352,11 @@
   <div class="page">
     <header>
       <div class="brand">
-        <h1>UBS Francisca de Oliveira Silva</h1>
-        <div class="sub2">PAINEL DE CHAMADA</div>
+        <div class="brasao"><img src="img/brasao.png" alt="Brasão de Agudos do Sul" onerror="this.parentNode.remove()"></div>
+        <div>
+          <h1>UBS Francisca de Oliveira Silva</h1>
+          <div class="sub2">PREFEITURA MUNICIPAL DE AGUDOS DO SUL · PAINEL DE CHAMADA</div>
+        </div>
       </div>
       <div class="clock">
         <div class="time" id="hora">--:--</div>
