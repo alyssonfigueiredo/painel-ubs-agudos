@@ -32,12 +32,7 @@
   .view.active { display: block; }
 
   /* ---------- picker ---------- */
-  #view-picker.active {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
+  .picker-center { display: flex; justify-content: center; padding-top: 8px; }
   .picker-card {
     background: linear-gradient(180deg, var(--card-2), var(--card));
     border: 1px solid var(--line);
@@ -45,7 +40,6 @@
     padding: 48px;
     width: 100%;
     max-width: 760px;
-    margin: 24px;
   }
   #salaButtons {
     display: grid;
@@ -54,9 +48,6 @@
   }
   @media (max-width: 560px) { #salaButtons { grid-template-columns: 1fr; } }
   .sub { color: var(--coral); font-weight: 700; letter-spacing: 0.1em; font-size: 13px; margin-bottom: 6px; }
-  /* mesmo cabeçalho da TV (brasão + nome), em cima da pergunta */
-  .picker-brand { padding-bottom: 22px; border-bottom: 1px solid var(--line); margin-bottom: 26px; }
-  .picker-brand .brasao { height: 84px; }
   .picker-card h2 { font-size: 26px; font-weight: 800; margin: 0 0 24px; }
   .sala-btn {
     display: block;
@@ -305,19 +296,29 @@
 
 <!-- ============ PICKER (escolha de papel, uma vez por PC) ============ -->
 <div id="view-picker" class="view">
-  <div class="picker-card">
-    <div class="brand picker-brand">
-      <div class="brasao"><img src="img/brasao.png" alt="Brasão de Agudos do Sul" onerror="this.parentNode.remove()"></div>
-      <div>
-        <h1>UBS Francisca de Oliveira Silva</h1>
-        <div class="sub2">PREFEITURA MUNICIPAL DE AGUDOS DO SUL</div>
+  <div class="page">
+    <header>
+      <div class="brand">
+        <div class="brasao"><img src="img/brasao.png" alt="Brasão de Agudos do Sul" onerror="this.parentNode.remove()"></div>
+        <div>
+          <h1>UBS Francisca de Oliveira Silva</h1>
+          <div class="sub2">PREFEITURA MUNICIPAL DE AGUDOS DO SUL · PAINEL DE CHAMADA</div>
+        </div>
+      </div>
+      <div class="clock">
+        <div class="time js-hora">--:--</div>
+        <div class="date js-data"></div>
+      </div>
+    </header>
+    <div class="picker-center">
+      <div class="picker-card">
+        <h2>Em qual sala você está?</h2>
+        <div class="recepcao-btn">
+          <button id="btnRecepcao">🖥 Esta é a TV da recepção</button>
+        </div>
+        <div id="salaButtons"></div>
       </div>
     </div>
-    <h2>Em qual sala você está?</h2>
-    <div class="recepcao-btn">
-      <button id="btnRecepcao">🖥 Esta é a TV da recepção</button>
-    </div>
-    <div id="salaButtons"></div>
   </div>
 </div>
 
@@ -351,8 +352,8 @@
         </div>
       </div>
       <div class="clock">
-        <div class="time" id="hora">--:--</div>
-        <div class="date" id="data"></div>
+        <div class="time js-hora">--:--</div>
+        <div class="date js-data"></div>
       </div>
     </header>
     <div class="grid">
@@ -585,6 +586,17 @@ function vigiarVersao(podeRecarregar) {
   });
 }
 
+// relógio do cabeçalho (TV e tela de escolha de sala)
+function atualizarRelogio() {
+  const agora = new Date();
+  const hora = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const data = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+  document.querySelectorAll('.js-hora').forEach(el => { el.textContent = hora; });
+  document.querySelectorAll('.js-data').forEach(el => { el.textContent = data; });
+}
+atualizarRelogio();
+setInterval(atualizarRelogio, 30000);
+
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -722,8 +734,6 @@ function iniciarRecepcao() {
   const historicoEl = document.getElementById('historico');
   const statusEl = document.getElementById('status');
   const diagnosticoEl = document.getElementById('diagnostico');
-  const horaEl = document.getElementById('hora');
-  const dataEl = document.getElementById('data');
   const btnRepetir = document.getElementById('btnRepetir');
   const btnMudo = document.getElementById('btnMudo');
 
@@ -794,14 +804,6 @@ function iniciarRecepcao() {
     }
     atualizarBotaoMudo();
   };
-
-  function atualizarRelogio() {
-    const agora = new Date();
-    horaEl.textContent = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    dataEl.textContent = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
-  }
-  atualizarRelogio();
-  setInterval(atualizarRelogio, 30000);
 
   statusEl.textContent = 'voz: /tts (Google Orus), reserva: navegador (' + VOZ_LANG + ')';
   let utteranceAtual = null; // o Chrome perde onend/onerror se o objeto for coletado no meio
