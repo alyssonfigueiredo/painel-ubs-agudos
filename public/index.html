@@ -1076,6 +1076,8 @@ function iniciarRecepcao() {
       const t0 = Date.now();
       fetch(url).then(res => {
         if (!res.ok) return res.text().then(msg => { throw new Error(res.status + ' ' + msg.slice(0, 200)); });
+        const tipo = res.headers.get('content-type') || '';
+        if (!tipo.startsWith('audio/')) throw new Error('resposta não é áudio (' + tipo + ')');
         return res.blob();
       }).then(blob => {
         if (concluido) return;

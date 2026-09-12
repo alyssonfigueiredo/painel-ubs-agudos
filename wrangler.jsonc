@@ -11,9 +11,9 @@
     "binding": "ASSETS",
     // /recepcao, /01, /vacina... não são arquivos: serve o index.html e o JS lê o caminho
     "not_found_handling": "single-page-application",
-    // por padrão um arquivo existente é servido sem passar pelo Worker; o versao.js
-    // precisa passar pra sair com Cache-Control: no-store (ver src/worker.js)
-    "run_worker_first": ["/versao.js"]
+    // caminhos que SEMPRE passam pelo Worker: /tts (senão o modo página única
+    // devolve o index.html no lugar do MP3) e /versao.js (sai com no-store)
+    "run_worker_first": ["/tts", "/versao.js"]
   },
   // limpeza diária dos chamados às 18h de Brasília (UTC-3, sem horário de verão) = 21:00 UTC
   "triggers": { "crons": ["0 21 * * *"] },
