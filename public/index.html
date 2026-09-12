@@ -241,11 +241,19 @@
     position: fixed; inset: 0;
     background: rgba(6,18,16,0.94);
     display: none; align-items: center; justify-content: center; flex-direction: column;
-    z-index: 998; cursor: pointer; text-align: center; padding: 20px;
+    z-index: 998; text-align: center; padding: 20px;
   }
   #bloqueado.ativa { display: flex; }
   #bloqueado h2 { font-size: 26px; margin-bottom: 10px; color: var(--yellow); }
   #bloqueado p { color: var(--text-dim); max-width: 520px; }
+  .bloq-botoes { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-top: 22px; }
+  .bloq-botoes button {
+    padding: 14px 22px; font-weight: 700; font-size: 15px; border-radius: 12px;
+    cursor: pointer; font-family: inherit; border: 1px solid var(--line);
+  }
+  #bloqAssumir { background: var(--coral); color: #21140f; border-color: transparent; }
+  #bloqSair { background: var(--card); color: var(--text); }
+  #bloqSair:hover { border-color: var(--coral); }
   /* diagnóstico fica escondido; tecla D na TV mostra/esconde. O histórico completo fica
      em localStorage (painel_log) e no console (painelLog()) */
   #status { position: fixed; bottom: 8px; right: 14px; font-size: 11px; color: var(--text-dim); opacity:.6; display: none; }
@@ -299,6 +307,10 @@
 <div id="bloqueado">
   <h2 id="bloqueadoTitulo"></h2>
   <p id="bloqueadoTexto"></p>
+  <div class="bloq-botoes">
+    <button id="bloqAssumir">Assumir nesta tela</button>
+    <button id="bloqSair">Manter a outra e escolher outra sala</button>
+  </div>
 </div>
 
 <!-- ============ PICKER (escolha de papel, uma vez por PC) ============ -->
@@ -366,6 +378,8 @@
   <div id="diagnostico"></div>
 </div>
 
+<!-- gerado pelo `npm run deploy` (scripts/deploy.mjs); não existe no git -->
+<script src="versao.js"></script>
 <script>
 // ===================== CONFIGURAÇÃO =====================
 const firebaseConfig = {
@@ -393,11 +407,12 @@ const SALAS = [
 const MAX_HISTORICO = 6;
 const REPETICOES_CHAMADO = 2; // quantas vezes a recepção anuncia cada chamado automático
 
-// SUBIR este número a cada deploy. A primeira tela que carrega a versão nova grava o
-// número em painel/versao, e toda tela aberta com número menor recarrega sozinha
-// (consultório na hora; recepção quando não estiver falando). Sem isso, uma aba
-// esquecida em outro PC roda código velho pra sempre.
-const VERSAO = 13;
+// Versão = horário do deploy, gerado automaticamente em versao.js pelo `npm run deploy`.
+// A primeira tela que carrega a versão nova grava o número em painel/versao, e toda
+// tela aberta com número menor recarrega sozinha (consultório na hora; recepção quando
+// não estiver falando). Sem isso, uma aba esquecida em outro PC roda código velho pra
+// sempre. Deploy feito sem o script (versao.js ausente) → 0: não grava nem recarrega.
+const VERSAO = (typeof window.VERSAO_DEPLOY === 'number') ? window.VERSAO_DEPLOY : 0;
 
 // Caminhos no banco. RENOMEADOS de propósito em relação às versões antigas (calls/ e
 // estado/): uma recepção antiga esquecida aberta em outro PC — de qualquer versão, até
@@ -521,9 +536,13 @@ function travaDePapel(ref, aoMudar) {
 const bloqueadoEl = document.getElementById('bloqueado');
 const bloqueadoTitulo = document.getElementById('bloqueadoTitulo');
 const bloqueadoTexto = document.getElementById('bloqueadoTexto');
-function mostrarBloqueio(titulo, texto) {
+// aoAssumir: esta tela toma o papel (a outra bloqueia); aoSair: mantém a outra e volta
+// pra tela de escolha
+function mostrarBloqueio(titulo, texto, aoAssumir, aoSair) {
   bloqueadoTitulo.textContent = titulo;
   bloqueadoTexto.textContent = texto;
+  document.getElementById('bloqAssumir').onclick = aoAssumir;
+  document.getElementById('bloqSair').onclick = aoSair;
   bloqueadoEl.classList.add('ativa');
 }
 function esconderBloqueio() { bloqueadoEl.classList.remove('ativa'); }
@@ -533,6 +552,7 @@ function horaDe(ts) {
 
 // ver comentário em VERSAO. podeRecarregar() diz se é seguro recarregar agora.
 function vigiarVersao(podeRecarregar) {
+  if (!VERSAO) return; // deploy sem o script: não participa da auto-atualização
   const ref = db.ref(DB.versao);
   ref.transaction(v => (typeof v === 'number' && v >= VERSAO) ? undefined : VERSAO);
   let timer = null;
@@ -591,22 +611,25 @@ function iniciarCaller(sala) {
     atualizarBotaoChamar();
     if (salaBloqueada) {
       mostrarBloqueio(sala + ' já está aberta em outro computador',
-        'Último sinal da outra tela às ' + horaDe(outra && outra.ts) + '. Pra evitar chamados duplicados, esta tela fica bloqueada. Se ESTE é o computador certo, clique aqui pra assumir.');
+        'Último sinal da outra tela às ' + horaDe(outra && outra.ts) + '. Pra evitar chamados duplicados, só uma tela por sala pode chamar.',
+        travaSala.assumir, sairDaSala);
     } else {
       esconderBloqueio();
       inputEl.focus();
     }
   });
-  bloqueadoEl.onclick = travaSala.assumir;
 
-  document.getElementById('trocarSalaCaller').onclick = () => {
-    if (!confirm('Trocar a sala desta tela?')) return;
+  function sairDaSala() {
     historicoSalaRef.off();
     travaSala.parar();
     esconderBloqueio();
     localStorage.removeItem('papel_tela');
     mostrarView('picker');
     montarPicker();
+  }
+  document.getElementById('trocarSalaCaller').onclick = () => {
+    if (!confirm('Trocar a sala desta tela?')) return;
+    sairDaSala();
   };
 
   // últimos chamados feitos por ESTA sala — usa o índice de "ts" que já existe, e
@@ -703,7 +726,8 @@ function iniciarRecepcao() {
     substituida = !ativa;
     if (substituida) {
       mostrarBloqueio('Outra tela está ativa como recepção',
-        'Último sinal dela às ' + horaDe(outra && outra.ts) + '. Esta só espelha os chamados; quem fala é a outra. Se ESTA é a TV da recepção, clique aqui pra assumir.');
+        'Último sinal dela às ' + horaDe(outra && outra.ts) + '. Esta só espelha os chamados; quem fala é a outra.',
+        trava.assumir, sairDaRecepcao);
       if (audioAtual) audioAtual.pause();
       if (window.speechSynthesis) speechSynthesis.cancel();
       if (finalizarFalaAtual) finalizarFalaAtual();
@@ -711,7 +735,16 @@ function iniciarRecepcao() {
       esconderBloqueio();
     }
   });
-  bloqueadoEl.onclick = trava.assumir;
+  function sairDaRecepcao() {
+    callsRef.off();
+    trava.parar();
+    esconderBloqueio();
+    if (audioAtual) audioAtual.pause();
+    if (window.speechSynthesis) speechSynthesis.cancel();
+    localStorage.removeItem('papel_tela');
+    mostrarView('picker');
+    montarPicker();
+  }
 
   function atualizarBotaoMudo() {
     btnMudo.textContent = mudo ? '🔇 Som desligado — clique pra reativar' : '🔊 Silenciar voz';
@@ -868,8 +901,16 @@ function iniciarRecepcao() {
   overlay.onclick = () => { comoLiberou = 'clique'; liberarSom(); };
   tentarLiberarAudio();
 
+  // texto pra FALA (a tela continua em maiúsculas): nome todo em maiúsculas o TTS lê
+  // como sigla, soletrando; "01" vira "zero um". Ajusta só o que vai pra voz.
+  function paraFala(texto) {
+    return String(texto)
+      .toLowerCase()
+      .replace(/(^|[\s\-])(\S)/g, (m, sep, c) => sep + c.toUpperCase())
+      .replace(/\b0+(\d)/g, '$1');
+  }
   function textoChamado(chamado) {
-    return `Atenção, ${chamado.nome}. Comparecer ao ${chamado.sala}.`;
+    return `Atenção, ${paraFala(chamado.nome)}. Comparecer ao ${paraFala(chamado.sala)}.`;
   }
 
   const estadoRef = db.ref(DB.falando);
@@ -901,24 +942,8 @@ function iniciarRecepcao() {
     diagnosticoEl.textContent += ' | ' + msg;
     gravarLog(new Date().toLocaleTimeString('pt-BR') + ' ' + msg);
   }
-  // tecla V: teste das vozes em português instaladas — cada aperto fala a próxima voz
-  // dizendo o próprio nome (e mostra o nome na linha de diagnóstico, com D)
-  let idxTesteVoz = -1;
   document.addEventListener('keydown', e => {
     if (e.key === 'd' || e.key === 'D') document.body.classList.toggle('mostrar-diag');
-    if (e.key === 'v' || e.key === 'V') {
-      const pt = speechSynthesis.getVoices().filter(v => /^pt([-_]|$)/i.test(v.lang));
-      if (pt.length === 0) return;
-      idxTesteVoz = (idxTesteVoz + 1) % pt.length;
-      const v = pt[idxTesteVoz];
-      speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance('Atenção, teste. Comparecer ao consultório. Esta é a voz ' + v.name.split(' ')[0]);
-      u.voice = v; u.lang = v.lang;
-      utteranceAtual = u;
-      speechSynthesis.speak(u);
-      diagnosticoEl.textContent = 'teste de voz ' + (idxTesteVoz + 1) + '/' + pt.length + ': ' + v.name;
-      document.body.classList.add('mostrar-diag');
-    }
   });
 
   function falar(texto, onend) {
@@ -1050,14 +1075,7 @@ function iniciarRecepcao() {
 
   document.getElementById('trocarSalaRecepcao').onclick = () => {
     if (!confirm('Trocar o papel desta tela?')) return;
-    callsRef.off();
-    trava.parar();
-    esconderBloqueio();
-    if (audioAtual) audioAtual.pause();
-    if (window.speechSynthesis) speechSynthesis.cancel();
-    localStorage.removeItem('papel_tela');
-    mostrarView('picker');
-    montarPicker();
+    sairDaRecepcao();
   };
 }
 
