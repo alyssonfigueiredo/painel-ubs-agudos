@@ -8,7 +8,12 @@
   },
   "assets": {
     "directory": "./public",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    // /recepcao, /01, /vacina... não são arquivos: serve o index.html e o JS lê o caminho
+    "not_found_handling": "single-page-application",
+    // por padrão um arquivo existente é servido sem passar pelo Worker; o versao.js
+    // precisa passar pra sair com Cache-Control: no-store (ver src/worker.js)
+    "run_worker_first": ["/versao.js"]
   },
   "routes": [
     { "pattern": "painel-ubs.soaperando.com.br", "custom_domain": true }

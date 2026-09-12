@@ -16,6 +16,14 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname === '/tts') return tts(url, env, ctx);
+    // versao.js muda a cada deploy: se o navegador guardasse uma cópia velha, a tela
+    // recarregaria e continuaria se achando desatualizada
+    if (url.pathname === '/versao.js') {
+      const res = await env.ASSETS.fetch(request);
+      const semCache = new Response(res.body, res);
+      semCache.headers.set('Cache-Control', 'no-store');
+      return semCache;
+    }
     return env.ASSETS.fetch(request);
   }
 };
