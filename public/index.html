@@ -641,6 +641,12 @@ function iniciarRecepcao() {
   // a desconexão — sem isso, todos os consultórios ficariam travados até alguém notar
   estadoRef.onDisconnect().set(false);
 
+  // cada etapa da fala vira um trecho na linha de diagnóstico (em vez de sobrescrever),
+  // pra dar pra ver na TV onde exatamente uma chamada parou
+  function diag(msg) {
+    diagnosticoEl.textContent += ' | ' + msg;
+  }
+
   function falar(texto, onend) {
     if (mudo) { onend(); return; } // silenciado: não fala e não trava nenhuma sala
     const audioElDiag = document.getElementById('keepAliveAudio');
@@ -657,7 +663,10 @@ function iniciarRecepcao() {
     finalizarFalaAtual = finalizar;
     // blinda contra falha de rede/carregamento travado — sem isso a trava de "falando"
     // (e o botão Chamar dos consultórios) ficaria presa esperando um áudio que não chega
-    const timeoutId = setTimeout(finalizar, 15000);
+    const timeoutId = setTimeout(() => {
+      diag('TIMEOUT 15s — o áudio não terminou (rede lenta ou /tts sem resposta)');
+      finalizar();
+    }, 15000);
 
     // eleição atômica: se essa mesma tela (recepção) estiver aberta em 2 abas/PCs por
     // engano, as duas recebem o mesmo chamado — sem isso, as duas falariam juntas,
@@ -669,7 +678,13 @@ function iniciarRecepcao() {
       // se o timeout de 15s já desistiu (rede lenta) antes dessa resposta atrasada
       // chegar, não pode falar agora — falaria um chamado velho por cima do próximo
       if (concluido) return;
-      if (!ganhou) { finalizar(); return; }
+      if (err) { diag('erro na trava estado/falando: ' + err.message); finalizar(); return; }
+      if (!ganhou) {
+        // quem perdeu não fala — e precisa dizer isso na tela, senão parece "mudo do nada"
+        diag('OUTRA TELA DE RECEPÇÃO assumiu este chamado (trava ocupada) — feche a recepção duplicada no outro PC/aba');
+        finalizar();
+        return;
+      }
 
       // ÁUDIO REAL tocado por <audio>, servido pela NOSSA origem em /tts (src/worker.js
       // busca o MP3 no Google Tradutor do lado do servidor). Não é speechSynthesis: o
@@ -686,14 +701,16 @@ function iniciarRecepcao() {
       function usarReserva(motivo) {
         if (reservaUsada || concluido) return;
         reservaUsada = true;
-        diagnosticoEl.textContent = motivo + ' — tentando voz do navegador (' + new Date().toLocaleTimeString('pt-BR') + ')';
+        diag(motivo + ' — tentando voz do navegador');
         falarComNavegador(texto, finalizar);
       }
-      audio.onended = finalizar;
+      audio.onended = () => { diag('terminou'); finalizar(); };
       audio.onerror = () => usarReserva('ERRO no áudio de rede (/tts) — verifique internet dessa tela');
       audio.src = url;
       audio.load();
-      audio.play().catch(err => usarReserva('play() do áudio falhou: ' + (err && err.name ? err.name : err)));
+      audio.play()
+        .then(() => diag('tocando (volume=' + audio.volume + ' muted=' + audio.muted + ')'))
+        .catch(err => usarReserva('play() do áudio falhou: ' + (err && err.name ? err.name : err)));
     });
   }
 
