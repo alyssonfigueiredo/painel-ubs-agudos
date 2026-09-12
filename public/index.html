@@ -380,6 +380,24 @@ const SALAS = [
   "Sala de Medicação"
 ];
 const MAX_HISTORICO = 6;
+
+// SUBIR este número a cada deploy. A primeira tela que carrega a versão nova grava o
+// número em painel/versao, e toda tela aberta com número menor recarrega sozinha
+// (consultório na hora; recepção quando não estiver falando). Sem isso, uma aba
+// esquecida em outro PC roda código velho pra sempre.
+const VERSAO = 2;
+
+// Caminhos no banco. RENOMEADOS de propósito em relação às versões antigas (calls/ e
+// estado/): uma recepção antiga esquecida aberta em outro PC — de qualquer versão, até
+// do domínio antigo, já que o banco é o mesmo — escuta os caminhos velhos e por isso
+// nunca mais recebe chamado nenhum. Era uma dessas que roubava a fala da TV.
+const DB = {
+  chamadas: 'chamadas',
+  chamadasLegado: 'calls',            // só leitura: consultório que ainda não recarregou
+  falando: 'painel/falando',
+  recepcaoAtiva: 'painel/recepcao_ativa',
+  versao: 'painel/versao'
+};
 // ==========================================================
 
 firebase.initializeApp(firebaseConfig);
@@ -409,6 +427,23 @@ function init() {
     mostrarView('picker');
     montarPicker();
   }
+}
+
+// ver comentário em VERSAO. podeRecarregar() diz se é seguro recarregar agora.
+function vigiarVersao(podeRecarregar) {
+  const ref = db.ref(DB.versao);
+  ref.transaction(v => (typeof v === 'number' && v >= VERSAO) ? undefined : VERSAO);
+  let timer = null;
+  ref.on('value', snap => {
+    const v = snap.val();
+    if (!(typeof v === 'number' && v > VERSAO)) return;
+    if (timer) return;
+    const tentar = () => {
+      if (podeRecarregar()) { location.reload(); return; }
+      timer = setTimeout(tentar, 3000);
+    };
+    tentar();
+  });
 }
 
 function escapeHtml(s) {
@@ -468,7 +503,7 @@ function iniciarCaller(sala) {
         return `<div class="hist-sala-item"><span class="h-nome">${escapeHtml(h.nome)}</span><span class="h-hora">${escapeHtml(hora)}</span></div>`;
       }).join('');
   }
-  const historicoSalaRef = db.ref('calls').orderByChild('ts').limitToLast(50);
+  const historicoSalaRef = db.ref(DB.chamadas).orderByChild('ts').limitToLast(50);
   historicoSalaRef.on('child_added', snap => {
     const val = snap.val();
     if (!val || val.sala !== sala) return;
@@ -480,7 +515,7 @@ function iniciarCaller(sala) {
   // bloqueia o botão Chamar enquanto a recepção estiver anunciando outro chamado —
   // impede que 2 chamados se sobreponham na fala
   let ocupado = false;
-  db.ref('estado/falando').on('value', snap => {
+  db.ref(DB.falando).on('value', snap => {
     ocupado = !!snap.val();
     btnChamarEl.disabled = ocupado;
     btnChamarEl.textContent = ocupado ? 'Aguarde...' : 'Chamar';
@@ -496,7 +531,7 @@ function iniciarCaller(sala) {
     if (ocupado) return;
     const nome = inputEl.value.trim();
     if (!nome) { inputEl.focus(); return; }
-    db.ref('calls').push({
+    db.ref(DB.chamadas).push({
       sala: sala,
       nome: nome.toUpperCase(),
       ts: firebase.database.ServerValue.TIMESTAMP
@@ -514,6 +549,7 @@ function iniciarCaller(sala) {
 
   btnChamarEl.onclick = chamar;
   inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') chamar(); });
+  vigiarVersao(() => true);
 }
 
 // ---------------- painel da recepção ----------------
@@ -547,7 +583,7 @@ function iniciarRecepcao() {
   // perde fica muda "do nada". Regra: a ÚLTIMA aberta assume; a antiga vê o aviso e
   // para de disputar. Clicar no aviso reassume (útil se a TV é que foi substituída).
   const minhaId = Math.random().toString(36).slice(2) + '-' + Date.now();
-  const ativaRef = db.ref('recepcao/ativa');
+  const ativaRef = db.ref(DB.recepcaoAtiva);
   const substituidaEl = document.getElementById('substituida');
   let substituida = false;
   function assumirRecepcao() {
@@ -615,35 +651,42 @@ function iniciarRecepcao() {
     }
   }
 
+  let somLiberado = false;
   function tentarLiberarAudio() {
     const audioEl = document.getElementById('keepAliveAudio');
     if (audioEl) {
-      audioEl.play().catch(err => {
+      audioEl.play().then(() => {
+        // o navegador deixou tocar sem clique (Chrome libera pra sites que tocam som com
+        // frequência) — então não precisa de ninguém clicando no overlay depois de um F5
+        if (!somLiberado) liberarSom();
+      }).catch(err => {
         diagnosticoEl.textContent = 'áudio de fundo bloqueado: ' + (err && err.name ? err.name : err);
       });
     }
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
   }
 
-  overlay.onclick = () => {
-    // toca um áudio SILENCIOSO em loop desde já (mesmo gesto de clique) e deixa rodando
-    // o dia inteiro — estabelece a aba como "produzindo áudio" pro Chrome, o que a política
-    // de autoplay de <audio> aceita mesmo sem gesto recente (diferente do speechSynthesis,
-    // que expira a liberação poucos segundos após o último clique — foi o que causava
-    // "só funciona clicando Repetir na tela": confirmado com foco/visibilidade/áudio de
-    // fundo todos OK e mesmo assim mudo, então a troca aqui é pra áudio real via rede,
-    // que segue a política mais permissiva de <audio>/<video>)
-    iniciarAudioContextSilencioso();
+  // chamado no clique do overlay OU sozinho, se o navegador já libera áudio sem gesto
+  function liberarSom() {
+    somLiberado = true;
+    // toca um áudio SILENCIOSO em loop desde já e deixa rodando o dia inteiro —
+    // estabelece a aba como "produzindo áudio" pro Chrome, o que a política de autoplay
+    // de <audio> aceita mesmo sem gesto recente (diferente do speechSynthesis, que expira
+    // a liberação poucos segundos após o último clique — foi o que causava "só funciona
+    // clicando Repetir na tela")
+    if (!audioCtx) iniciarAudioContextSilencioso();
     tentarLiberarAudio();
-    // destrava o elemento da voz DENTRO do gesto: toca o wav silencioso nele e pausa. A
-    // partir daqui o navegador aceita play() nesse mesmo elemento sem clique novo.
+    // destrava o elemento da voz: toca o wav silencioso nele e pausa. A partir daqui o
+    // navegador aceita play() nesse mesmo elemento sem clique novo.
     const silencio = document.getElementById('keepAliveAudio').getAttribute('src');
     vozAudio.src = silencio;
     vozAudio.play().then(() => { vozAudio.pause(); }).catch(err => {
       diagnosticoEl.textContent = 'não destravou a voz: ' + (err && err.name ? err.name : err);
     });
     overlay.style.display = 'none';
-  };
+  }
+  overlay.onclick = liberarSom;
+  tentarLiberarAudio();
 
   function textoChamado(chamado) {
     return `Atenção, ${chamado.nome}. Comparecer ao ${chamado.sala}.`;
@@ -667,7 +710,7 @@ function iniciarRecepcao() {
     }
   }
 
-  const estadoRef = db.ref('estado/falando');
+  const estadoRef = db.ref(DB.falando);
   // limpa o estado ao carregar — se a TV foi recarregada no meio de uma fala, ninguém
   // mais vai limpar aquele "true" preso e os consultórios ficariam travados pra sempre
   estadoRef.set(false);
@@ -772,13 +815,20 @@ function iniciarRecepcao() {
     ).join('');
   }
 
-  const callsRef = db.ref('calls').orderByChild('ts').startAt(Date.now());
-  callsRef.on('child_added', snap => {
+  function receberChamado(snap) {
     const val = snap.val();
     if (!val || !val.nome || !val.sala) return;
     filaChamados.push(val);
     processarFila();
-  });
+  }
+  const callsRef = db.ref(DB.chamadas).orderByChild('ts').startAt(Date.now());
+  callsRef.on('child_added', receberChamado);
+  // caminho antigo: chamado de consultório que ainda roda versão velha (vai recarregar
+  // sozinho pela vigilância de versão, mas até lá não pode perder chamado)
+  const callsLegadoRef = db.ref(DB.chamadasLegado).orderByChild('ts').startAt(Date.now());
+  callsLegadoRef.on('child_added', receberChamado);
+
+  vigiarVersao(() => !processando && filaChamados.length === 0);
 
   btnRepetir.onclick = () => {
     if (!ultimoChamado || processando) return;
@@ -789,6 +839,7 @@ function iniciarRecepcao() {
   document.getElementById('trocarSalaRecepcao').onclick = () => {
     if (!confirm('Trocar o papel desta tela?')) return;
     callsRef.off();
+    callsLegadoRef.off();
     ativaRef.off();
     if (audioAtual) audioAtual.pause();
     if (window.speechSynthesis) window.speechSynthesis.cancel();
