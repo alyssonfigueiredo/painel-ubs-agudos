@@ -913,24 +913,8 @@ function iniciarRecepcao() {
     diagnosticoEl.textContent += ' | ' + msg;
     gravarLog(new Date().toLocaleTimeString('pt-BR') + ' ' + msg);
   }
-  // tecla V: teste das vozes em português instaladas — cada aperto fala a próxima voz
-  // dizendo o próprio nome (e mostra o nome na linha de diagnóstico, com D)
-  let idxTesteVoz = -1;
   document.addEventListener('keydown', e => {
     if (e.key === 'd' || e.key === 'D') document.body.classList.toggle('mostrar-diag');
-    if (e.key === 'v' || e.key === 'V') {
-      const pt = speechSynthesis.getVoices().filter(v => /^pt([-_]|$)/i.test(v.lang));
-      if (pt.length === 0) return;
-      idxTesteVoz = (idxTesteVoz + 1) % pt.length;
-      const v = pt[idxTesteVoz];
-      speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance('Atenção, teste. Comparecer ao consultório. Esta é a voz ' + v.name.split(' ')[0]);
-      u.voice = v; u.lang = v.lang;
-      utteranceAtual = u;
-      speechSynthesis.speak(u);
-      diagnosticoEl.textContent = 'teste de voz ' + (idxTesteVoz + 1) + '/' + pt.length + ': ' + v.name;
-      document.body.classList.add('mostrar-diag');
-    }
   });
 
   function falar(texto, onend) {
