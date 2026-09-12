@@ -397,7 +397,7 @@ const REPETICOES_CHAMADO = 2; // quantas vezes a recepção anuncia cada chamado
 // número em painel/versao, e toda tela aberta com número menor recarrega sozinha
 // (consultório na hora; recepção quando não estiver falando). Sem isso, uma aba
 // esquecida em outro PC roda código velho pra sempre.
-const VERSAO = 12;
+const VERSAO = 13;
 
 // Caminhos no banco. RENOMEADOS de propósito em relação às versões antigas (calls/ e
 // estado/): uma recepção antiga esquecida aberta em outro PC — de qualquer versão, até
@@ -411,10 +411,10 @@ const DB = {
   versao: 'painel/versao'
 };
 
-// Voz da recepção: masculina do próprio sistema. Procura, nesta ordem, entre as vozes
-// em português instaladas (Windows: "Microsoft Daniel"; Mac: Reed, Eddy...); se nenhuma
-// existir, fica a padrão do navegador pra pt-BR. Se o navegador negar ou a fala não
-// começar, cai no /tts do Google (áudio via Worker).
+// Voz da recepção: PRINCIPAL é a Google Cloud TTS (masculina "Orus", Chirp 3 HD), gerada
+// pelo Worker em /tts (chave fica no Cloudflare). RESERVA, se o /tts falhar (cota do mês
+// estourada, chave/API com problema, sem internet): voz do próprio navegador — procura,
+// nesta ordem, entre as vozes em português instaladas; se nenhuma existir, a padrão pt-BR.
 const VOZ_LANG = 'pt-BR';
 const VOZES_PREFERIDAS = ['Microsoft Daniel', 'Daniel', 'Reed', 'Eddy', 'Rocko', 'Grandpa', 'Felipe'];
 // ==========================================================
@@ -843,27 +843,13 @@ function iniciarRecepcao() {
     if (audioEl) {
       audioEl.play().then(() => {
         // o navegador deixou tocar sem clique (Chrome libera pra sites que tocam som com
-        // frequência). Mas a voz do navegador tem regra própria (precisa de 1 clique na
-        // página desde a carga) — só esconde o overlay sozinho se ela também passar.
-        if (!somLiberado && !testandoVoz) testarVozDoNavegador();
+        // frequência) — o /tts, que é <audio>, vai tocar também. Esconde o overlay.
+        if (!somLiberado) { comoLiberou = 'sozinho (sem clique)'; liberarSom(); }
       }).catch(err => {
         diag('áudio de fundo bloqueado: ' + (err && err.name ? err.name : err));
       });
     }
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
-  }
-
-  let testandoVoz = false;
-  function testarVozDoNavegador() {
-    if (!window.speechSynthesis) { comoLiberou = 'sozinho (sem clique, só /tts)'; liberarSom(); return; }
-    testandoVoz = true;
-    const u = novaFala('a');
-    u.volume = 0;
-    const fim = setTimeout(() => { testandoVoz = false; }, 6000);
-    u.onend = () => { clearTimeout(fim); testandoVoz = false; if (!somLiberado) { comoLiberou = 'sozinho (sem clique)'; liberarSom(); } };
-    u.onerror = e => { clearTimeout(fim); testandoVoz = false; diag('voz do navegador sem clique: ' + e.error + ' — overlay fica'); };
-    utteranceAtual = u;
-    speechSynthesis.speak(u);
   }
 
   // chamado no clique do overlay OU sozinho, se o navegador já libera áudio e voz sem gesto
@@ -965,35 +951,39 @@ function iniciarRecepcao() {
     // ganhar a disputa e deixar a TV muda sem motivo aparente.
     estadoRef.set(true).catch(err => diag('erro na trava estado/falando: ' + err.message));
 
-    // RESERVA: áudio real tocado por <audio>, servido pela NOSSA origem em /tts
-    // (src/worker.js busca o MP3 no Google Tradutor do lado do servidor). Não chamar o
-    // Google direto daqui: com Referer da nossa página ele responde erro em vez de MP3,
-    // e o <audio> dispara NotSupportedError no play().
-    function tocarTts() {
+    // PRINCIPAL: MP3 da Google Cloud TTS (voz Orus), servido pela NOSSA origem em /tts
+    // (src/worker.js). Baixa com fetch primeiro pra saber O MOTIVO se falhar (cota,
+    // chave, API) e só então toca via <audio>; qualquer falha cai na voz do navegador.
+    function tocarTts(aoFalhar) {
       const url = '/tts?q=' + encodeURIComponent(texto.slice(0, 200));
-      const audio = new Audio(url);
-      audioAtual = audio;
       const t0 = Date.now();
-      audio.onended = () => {
-        diag('terminou em ' + (Date.now() - t0) + 'ms (duração=' + audio.duration.toFixed(1) + 's)');
-        finalizar();
-      };
-      audio.onerror = () => {
-        diag('ERRO no áudio de rede (/tts) — verifique internet dessa tela');
-        finalizar();
-      };
-      audio.play()
-        .then(() => diag('tocando /tts após ' + (Date.now() - t0) + 'ms (som liberado: ' + comoLiberou + ')'))
-        .catch(err => {
-          diag('play() do áudio falhou: ' + (err && err.name ? err.name : err));
+      fetch(url).then(res => {
+        if (!res.ok) return res.text().then(msg => { throw new Error(res.status + ' ' + msg.slice(0, 200)); });
+        return res.blob();
+      }).then(blob => {
+        if (concluido) return;
+        const audio = new Audio(URL.createObjectURL(blob));
+        audioAtual = audio;
+        audio.onended = () => {
+          diag('terminou em ' + (Date.now() - t0) + 'ms (duração=' + audio.duration.toFixed(1) + 's)');
+          URL.revokeObjectURL(audio.src);
           finalizar();
-        });
+        };
+        audio.onerror = () => aoFalhar('áudio do /tts não tocou');
+        audio.play()
+          .then(() => diag('tocando /tts (Orus) após ' + (Date.now() - t0) + 'ms (som liberado: ' + comoLiberou + ')'))
+          .catch(err => aoFalhar('play() do áudio falhou: ' + (err && err.name ? err.name : err)));
+      }).catch(err => aoFalhar('/tts falhou: ' + err.message));
     }
 
-    // principal: voz padrão do navegador (ver VOZ_LANG); reserva: /tts
-    falarComNavegador(texto, finalizar, motivo => {
-      diag(motivo + ' — usando /tts');
-      tocarTts();
+    // principal: /tts (Google Orus); reserva: voz do navegador; se ambas falharem, libera a trava
+    tocarTts(motivo => {
+      if (concluido) return;
+      diag(motivo + ' — usando a voz do navegador');
+      falarComNavegador(texto, finalizar, motivo2 => {
+        diag(motivo2 + ' — sem voz nenhuma neste chamado');
+        finalizar();
+      });
     });
   }
 
