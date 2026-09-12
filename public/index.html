@@ -454,12 +454,25 @@ function mostrarView(nome) {
 // Ao ACESSAR o site, cai na escolha de sala. O papel fica só na aba (sessionStorage):
 // um F5 ou a recarga automática de deploy mantém a sala; uma aba nova / outro PC
 // começa na escolha. Pra TV ligar já como recepção sem ninguém clicar (atalho ou
-// quiosque), abrir com ?tela=recepcao — também vale ?tela=Consultório 01.
+// quiosque), abrir com ?tela=recepcao. Cada sala também tem o seu, sem acento nem
+// espaço: ?tela=consultorio-01, ?tela=odontologia, ?tela=sala-de-vacina...
 function papelSalvo() {
   try { return sessionStorage.getItem('papel_tela'); } catch (e) { return null; }
 }
 function guardarPapel(papel) {
   try { if (papel) sessionStorage.setItem('papel_tela', papel); else sessionStorage.removeItem('papel_tela'); } catch (e) {}
+}
+// "Consultório 01" -> "consultorio-01" (pra comparar com o ?tela= da URL)
+function slug(texto) {
+  return String(texto).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+function papelDaUrl() {
+  const q = new URLSearchParams(location.search).get('tela');
+  if (!q) return null;
+  const alvo = slug(q);
+  if (alvo === 'recepcao') return 'recepcao';
+  return SALAS.find(sala => slug(sala) === alvo) || null;
 }
 function init() {
   // versões antigas guardavam o papel no PC (localStorage). Migra UMA vez pra aba: a
@@ -469,7 +482,7 @@ function init() {
     const legado = localStorage.getItem('papel_tela');
     if (legado) { if (!papelSalvo()) guardarPapel(legado); localStorage.removeItem('papel_tela'); }
   } catch (e) {}
-  const daUrl = new URLSearchParams(location.search).get('tela');
+  const daUrl = papelDaUrl();
   const papel = daUrl || papelSalvo(); // 'recepcao' ou nome de uma sala
   if (daUrl) guardarPapel(daUrl);
   if (papel === 'recepcao') {
