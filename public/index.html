@@ -385,7 +385,7 @@ const MAX_HISTORICO = 6;
 // número em painel/versao, e toda tela aberta com número menor recarrega sozinha
 // (consultório na hora; recepção quando não estiver falando). Sem isso, uma aba
 // esquecida em outro PC roda código velho pra sempre.
-const VERSAO = 3;
+const VERSAO = 4;
 
 // Caminhos no banco. RENOMEADOS de propósito em relação às versões antigas (calls/ e
 // estado/): uma recepção antiga esquecida aberta em outro PC — de qualquer versão, até
@@ -393,7 +393,6 @@ const VERSAO = 3;
 // nunca mais recebe chamado nenhum. Era uma dessas que roubava a fala da TV.
 const DB = {
   chamadas: 'chamadas',
-  chamadasLegado: 'calls',            // só leitura: consultório que ainda não recarregou
   falando: 'painel/falando',
   recepcaoAtiva: 'painel/recepcao_ativa',
   versao: 'painel/versao'
@@ -869,12 +868,11 @@ function iniciarRecepcao() {
     filaChamados.push(val);
     processarFila();
   }
+  // NÃO ler o caminho antigo (calls/): uma recepção velha esquecida escuta ele, e as
+  // duas falariam juntas o chamado de um consultório que ainda não recarregou. Esse
+  // consultório precisa de UM F5 — as próximas atualizações são automáticas.
   const callsRef = db.ref(DB.chamadas).orderByChild('ts').startAt(Date.now());
   callsRef.on('child_added', receberChamado);
-  // caminho antigo: chamado de consultório que ainda roda versão velha (vai recarregar
-  // sozinho pela vigilância de versão, mas até lá não pode perder chamado)
-  const callsLegadoRef = db.ref(DB.chamadasLegado).orderByChild('ts').startAt(Date.now());
-  callsLegadoRef.on('child_added', receberChamado);
 
   vigiarVersao(() => !processando && filaChamados.length === 0);
 
@@ -887,7 +885,6 @@ function iniciarRecepcao() {
   document.getElementById('trocarSalaRecepcao').onclick = () => {
     if (!confirm('Trocar o papel desta tela?')) return;
     callsRef.off();
-    callsLegadoRef.off();
     ativaRef.off();
     clearInterval(batimentoTimer);
     if (!substituida) { ativaRef.onDisconnect().cancel(); ativaRef.remove(); }
