@@ -54,7 +54,10 @@
   }
   @media (max-width: 560px) { #salaButtons { grid-template-columns: 1fr; } }
   .sub { color: var(--coral); font-weight: 700; letter-spacing: 0.1em; font-size: 13px; margin-bottom: 6px; }
-  .picker-card h1 { font-size: 26px; font-weight: 800; margin: 0 0 28px; }
+  /* mesmo cabeçalho da TV (brasão + nome), em cima da pergunta */
+  .picker-brand { padding-bottom: 22px; border-bottom: 1px solid var(--line); margin-bottom: 26px; }
+  .picker-brand .brasao { height: 84px; }
+  .picker-card h2 { font-size: 26px; font-weight: 800; margin: 0 0 24px; }
   .sala-btn {
     display: block;
     width: 100%;
@@ -303,8 +306,14 @@
 <!-- ============ PICKER (escolha de papel, uma vez por PC) ============ -->
 <div id="view-picker" class="view">
   <div class="picker-card">
-    <div class="sub">UBS FRANCISCA DE OLIVEIRA SILVA</div>
-    <h1>Em qual sala você está?</h1>
+    <div class="brand picker-brand">
+      <div class="brasao"><img src="img/brasao.png" alt="Brasão de Agudos do Sul" onerror="this.parentNode.remove()"></div>
+      <div>
+        <h1>UBS Francisca de Oliveira Silva</h1>
+        <div class="sub2">PREFEITURA MUNICIPAL DE AGUDOS DO SUL</div>
+      </div>
+    </div>
+    <h2>Em qual sala você está?</h2>
     <div class="recepcao-btn">
       <button id="btnRecepcao">🖥 Esta é a TV da recepção</button>
     </div>
