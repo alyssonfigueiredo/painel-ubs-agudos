@@ -44,15 +44,20 @@
     border-radius: 28px;
     padding: 48px;
     width: 100%;
-    max-width: 460px;
+    max-width: 760px;
     margin: 24px;
   }
+  #salaButtons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  @media (max-width: 560px) { #salaButtons { grid-template-columns: 1fr; } }
   .sub { color: var(--coral); font-weight: 700; letter-spacing: 0.1em; font-size: 13px; margin-bottom: 6px; }
   .picker-card h1 { font-size: 26px; font-weight: 800; margin: 0 0 28px; }
   .sala-btn {
     display: block;
     width: 100%;
-    margin-bottom: 10px;
     background: var(--card);
     color: var(--text);
     border: 1px solid var(--line);
@@ -66,9 +71,9 @@
   }
   .sala-btn:active { background: var(--card-2); }
   .recepcao-btn {
-    margin-top: 22px;
-    border-top: 1px solid var(--line);
-    padding-top: 22px;
+    margin-bottom: 22px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 22px;
   }
   .recepcao-btn button {
     background: var(--coral);
@@ -244,18 +249,20 @@
   #status { position: fixed; bottom: 8px; right: 14px; font-size: 11px; color: var(--text-dim); opacity:.6; }
   #diagnostico { position: fixed; bottom: 26px; right: 14px; font-size: 11px; color: var(--yellow); max-width: 340px; text-align: right; }
   #trocarSalaRecepcao {
-    position: fixed; bottom: 8px; left: 14px;
-    background: transparent;
-    color: var(--text-dim);
-    border: 1px solid var(--line);
-    padding: 6px 12px;
-    font-size: 11px;
-    border-radius: 8px;
+    margin-top: 14px;
+    margin-left: 8px;
+    background: var(--card);
+    color: var(--text);
+    border: 2px solid var(--line);
+    padding: 12px 20px;
+    font-weight: 800;
+    font-size: 14px;
+    border-radius: 14px;
     cursor: pointer;
     font-family: inherit;
-    opacity: .6;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.35);
   }
-  #trocarSalaRecepcao:hover { opacity: 1; }
+  #trocarSalaRecepcao:hover { border-color: var(--coral); }
 
   .mudo-btn {
     margin-top: 14px;
@@ -295,11 +302,11 @@
 <div id="view-picker" class="view">
   <div class="picker-card">
     <div class="sub">UBS FRANCISCA DE OLIVEIRA SILVA</div>
-    <h1>Qual é o papel desta tela?</h1>
-    <div id="salaButtons"></div>
+    <h1>Em qual sala você está?</h1>
     <div class="recepcao-btn">
       <button id="btnRecepcao">🖥 Esta é a TV da recepção</button>
     </div>
+    <div id="salaButtons"></div>
   </div>
 </div>
 
@@ -333,6 +340,7 @@
         <div class="time" id="hora">--:--</div>
         <div class="date" id="data"></div>
         <button id="btnMudo" class="mudo-btn">🔊 Silenciar voz</button>
+        <button id="trocarSalaRecepcao">🔄 Trocar tela / sala</button>
       </div>
     </header>
     <div class="grid">
@@ -353,7 +361,6 @@
   </div>
   <div id="status"></div>
   <div id="diagnostico"></div>
-  <button id="trocarSalaRecepcao">🔄 trocar papel desta tela</button>
 </div>
 
 <script>
