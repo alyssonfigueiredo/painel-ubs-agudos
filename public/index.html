@@ -397,7 +397,7 @@ const REPETICOES_CHAMADO = 2; // quantas vezes a recepção anuncia cada chamado
 // número em painel/versao, e toda tela aberta com número menor recarrega sozinha
 // (consultório na hora; recepção quando não estiver falando). Sem isso, uma aba
 // esquecida em outro PC roda código velho pra sempre.
-const VERSAO = 10;
+const VERSAO = 11;
 
 // Caminhos no banco. RENOMEADOS de propósito em relação às versões antigas (calls/ e
 // estado/): uma recepção antiga esquecida aberta em outro PC — de qualquer versão, até
@@ -411,10 +411,12 @@ const DB = {
   versao: 'painel/versao'
 };
 
-// Voz da recepção: a padrão do próprio navegador/sistema pra pt-BR, exatamente como na
-// versão original (sem escolher voz — escolher mudava a voz de um PC pro outro). Se o
-// navegador negar ou a fala não começar, cai no /tts do Google (áudio via Worker).
+// Voz da recepção: masculina do próprio sistema. Procura, nesta ordem, entre as vozes
+// em português instaladas (Windows: "Microsoft Daniel"; Mac: Reed, Eddy...); se nenhuma
+// existir, fica a padrão do navegador pra pt-BR. Se o navegador negar ou a fala não
+// começar, cai no /tts do Google (áudio via Worker).
 const VOZ_LANG = 'pt-BR';
+const VOZES_PREFERIDAS = ['Microsoft Daniel', 'Daniel', 'Reed', 'Eddy', 'Rocko', 'Grandpa', 'Felipe'];
 // ==========================================================
 
 firebase.initializeApp(firebaseConfig);
@@ -743,9 +745,19 @@ function iniciarRecepcao() {
   statusEl.textContent = 'voz: padrão do navegador (' + VOZ_LANG + '), reserva /tts';
   let utteranceAtual = null; // o Chrome perde onend/onerror se o objeto for coletado no meio
 
+  function vozPreferida() {
+    const pt = speechSynthesis.getVoices().filter(v => /^pt([-_]|$)/i.test(v.lang));
+    for (const nome of VOZES_PREFERIDAS) {
+      const v = pt.find(v => v.name.toLowerCase().startsWith(nome.toLowerCase()));
+      if (v) return v;
+    }
+    return null;
+  }
   function novaFala(texto) {
     const u = new SpeechSynthesisUtterance(texto);
-    u.lang = VOZ_LANG; // sem u.voice de propósito: fica a padrão do sistema, como antes
+    u.lang = VOZ_LANG;
+    const v = vozPreferida();
+    if (v) u.voice = v;
     return u;
   }
 
