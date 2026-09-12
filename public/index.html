@@ -299,7 +299,7 @@
   <div class="page">
     <header>
       <div class="brand">
-        <div class="brasao"><img src="img/brasao.png" alt="Brasão de Agudos do Sul" onerror="this.parentNode.remove()"></div>
+        <div class="brasao"><img src="/img/brasao.png" alt="Brasão de Agudos do Sul" onerror="this.parentNode.remove()"></div>
         <div>
           <h1>UBS Francisca de Oliveira Silva</h1>
           <div class="sub2">PREFEITURA MUNICIPAL DE AGUDOS DO SUL · PAINEL DE CHAMADA</div>
@@ -345,7 +345,7 @@
   <div class="page">
     <header>
       <div class="brand">
-        <div class="brasao"><img src="img/brasao.png" alt="Brasão de Agudos do Sul" onerror="this.parentNode.remove()"></div>
+        <div class="brasao"><img src="/img/brasao.png" alt="Brasão de Agudos do Sul" onerror="this.parentNode.remove()"></div>
         <div>
           <h1>UBS Francisca de Oliveira Silva</h1>
           <div class="sub2">PREFEITURA MUNICIPAL DE AGUDOS DO SUL · PAINEL DE CHAMADA</div>
@@ -381,7 +381,7 @@
 </div>
 
 <!-- gerado pelo `npm run deploy` (scripts/deploy.mjs); não existe no git -->
-<script src="versao.js"></script>
+<script src="/versao.js"></script>
 <script>
 // ===================== CONFIGURAÇÃO =====================
 const firebaseConfig = {
@@ -406,6 +406,20 @@ const SALAS = [
   "Sala de Vacina",
   "Sala de Medicação"
 ];
+// endereço curto de cada tela: painel-ubs.soaperando.com.br/01, /vacina, /recepcao...
+// (abre direto no papel, sem passar pela escolha — bom pra atalho/página inicial)
+const ATALHO_URL = {
+  '01': 'Consultório 01',
+  '02': 'Consultório 02',
+  '03': 'Consultório 03',
+  '04': 'Consultório 04',
+  'odontologia': 'Odontologia',
+  'nutricao': 'Nutrição',
+  'enfermagem': 'Enfermagem',
+  'triagem': 'Triagem',
+  'vacina': 'Sala de Vacina',
+  'medicacao': 'Sala de Medicação'
+};
 const MAX_HISTORICO = 6;
 const REPETICOES_CHAMADO = 2; // quantas vezes a recepção anuncia cada chamado automático
 
@@ -453,9 +467,9 @@ function mostrarView(nome) {
 // ---------------- roteamento por papel ----------------
 // Ao ACESSAR o site, cai na escolha de sala. O papel fica só na aba (sessionStorage):
 // um F5 ou a recarga automática de deploy mantém a sala; uma aba nova / outro PC
-// começa na escolha. Pra TV ligar já como recepção sem ninguém clicar (atalho ou
-// quiosque), abrir com ?tela=recepcao. Cada sala também tem o seu, sem acento nem
-// espaço: ?tela=consultorio-01, ?tela=odontologia, ?tela=sala-de-vacina...
+// começa na escolha. Pra abrir já no papel sem clicar (atalho, página inicial da TV):
+// /recepcao ou o endereço curto da sala em ATALHO_URL (/01, /vacina...). O nome
+// completo também vale (/consultorio-01, /sala-de-vacina, sem acento ou com).
 function papelSalvo() {
   try { return sessionStorage.getItem('papel_tela'); } catch (e) { return null; }
 }
@@ -468,10 +482,12 @@ function slug(texto) {
     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 function papelDaUrl() {
-  const q = new URLSearchParams(location.search).get('tela');
+  const caminho = decodeURIComponent(location.pathname).replace(/^\/+|\/+$/g, '');
+  const q = caminho || new URLSearchParams(location.search).get('tela'); // ?tela= ainda vale
   if (!q) return null;
   const alvo = slug(q);
   if (alvo === 'recepcao') return 'recepcao';
+  if (ATALHO_URL[alvo]) return ATALHO_URL[alvo];
   return SALAS.find(sala => slug(sala) === alvo) || null;
 }
 function init() {
@@ -685,7 +701,7 @@ function iniciarCaller(sala) {
   function sairDaSala() {
     travaSala.parar();
     guardarPapel(null);
-    location.replace(location.pathname); // tira o ?tela= da URL, senão voltaria pro mesmo papel
+    location.replace('/'); // sai do /01, /recepcao... senão voltaria pro mesmo papel
   }
   document.getElementById('trocarSalaCaller').onclick = () => {
     if (!confirm('Trocar a sala desta tela?')) return;
@@ -813,7 +829,7 @@ function iniciarRecepcao() {
     trava.parar();
     if (ativaFalando) estadoRef.onDisconnect().cancel();
     guardarPapel(null);
-    location.replace(location.pathname); // tira o ?tela= da URL, senão voltaria pro mesmo papel
+    location.replace('/'); // sai do /01, /recepcao... senão voltaria pro mesmo papel
   }
 
   function atualizarBotaoMudo() {
