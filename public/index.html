@@ -450,9 +450,28 @@ function mostrarView(nome) {
   views[nome].classList.add('active');
 }
 
-// ---------------- roteamento por papel salvo neste PC ----------------
+// ---------------- roteamento por papel ----------------
+// Ao ACESSAR o site, cai na escolha de sala. O papel fica só na aba (sessionStorage):
+// um F5 ou a recarga automática de deploy mantém a sala; uma aba nova / outro PC
+// começa na escolha. Pra TV ligar já como recepção sem ninguém clicar (atalho ou
+// quiosque), abrir com ?tela=recepcao — também vale ?tela=Consultório 01.
+function papelSalvo() {
+  try { return sessionStorage.getItem('papel_tela'); } catch (e) { return null; }
+}
+function guardarPapel(papel) {
+  try { if (papel) sessionStorage.setItem('papel_tela', papel); else sessionStorage.removeItem('papel_tela'); } catch (e) {}
+}
 function init() {
-  const papel = localStorage.getItem('papel_tela'); // 'recepcao' ou nome de uma sala
+  // versões antigas guardavam o papel no PC (localStorage). Migra UMA vez pra aba: a
+  // TV e as salas abertas na hora do deploy continuam no papel delas depois da recarga
+  // automática, em vez de cair na escolha com ninguém pra clicar
+  try {
+    const legado = localStorage.getItem('papel_tela');
+    if (legado) { if (!papelSalvo()) guardarPapel(legado); localStorage.removeItem('papel_tela'); }
+  } catch (e) {}
+  const daUrl = new URLSearchParams(location.search).get('tela');
+  const papel = daUrl || papelSalvo(); // 'recepcao' ou nome de uma sala
+  if (daUrl) guardarPapel(daUrl);
   if (papel === 'recepcao') {
     mostrarView('recepcao');
     iniciarRecepcao();
@@ -611,14 +630,14 @@ function montarPicker() {
     btn.textContent = sala;
     btn.className = 'sala-btn';
     btn.onclick = () => {
-      localStorage.setItem('papel_tela', sala);
+      guardarPapel(sala);
       mostrarView('caller');
       iniciarCaller(sala);
     };
     salaButtonsEl.appendChild(btn);
   });
   document.getElementById('btnRecepcao').onclick = () => {
-    localStorage.setItem('papel_tela', 'recepcao');
+    guardarPapel('recepcao');
     mostrarView('recepcao');
     iniciarRecepcao();
   };
@@ -652,8 +671,8 @@ function iniciarCaller(sala) {
   // (Enter, "falando") que continuariam vivos e agindo pela sala antiga
   function sairDaSala() {
     travaSala.parar();
-    localStorage.removeItem('papel_tela');
-    location.reload();
+    guardarPapel(null);
+    location.replace(location.pathname); // tira o ?tela= da URL, senão voltaria pro mesmo papel
   }
   document.getElementById('trocarSalaCaller').onclick = () => {
     if (!confirm('Trocar a sala desta tela?')) return;
@@ -780,8 +799,8 @@ function iniciarRecepcao() {
     if (finalizarFalaAtual) finalizarFalaAtual();
     trava.parar();
     if (ativaFalando) estadoRef.onDisconnect().cancel();
-    localStorage.removeItem('papel_tela');
-    location.reload();
+    guardarPapel(null);
+    location.replace(location.pathname); // tira o ?tela= da URL, senão voltaria pro mesmo papel
   }
 
   function atualizarBotaoMudo() {
