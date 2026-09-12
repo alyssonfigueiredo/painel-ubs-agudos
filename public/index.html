@@ -232,6 +232,15 @@
   }
   #overlay h2 { font-size: 26px; margin-bottom: 10px; }
   #overlay p { color: var(--text-dim); }
+  #substituida {
+    position: fixed; inset: 0;
+    background: rgba(6,18,16,0.94);
+    display: none; align-items: center; justify-content: center; flex-direction: column;
+    z-index: 998; cursor: pointer; text-align: center; padding: 20px;
+  }
+  #substituida.ativa { display: flex; }
+  #substituida h2 { font-size: 26px; margin-bottom: 10px; color: var(--yellow); }
+  #substituida p { color: var(--text-dim); max-width: 520px; }
   #status { position: fixed; bottom: 8px; right: 14px; font-size: 11px; color: var(--text-dim); opacity:.6; }
   #diagnostico { position: fixed; bottom: 26px; right: 14px; font-size: 11px; color: var(--yellow); max-width: 340px; text-align: right; }
   #trocarSalaRecepcao {
@@ -304,6 +313,10 @@
 <!-- ============ RECEPÇÃO (espelho na TV) ============ -->
 <div id="view-recepcao" class="view">
   <audio id="keepAliveAudio" loop preload="auto" src="data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA=="></audio>
+  <div id="substituida">
+    <h2 id="substituidaTitulo">Já existe uma recepção ativa</h2>
+    <p id="substituidaTexto">Esta tela só espelha os chamados; quem fala é a outra. Se ESTA é a TV da recepção, clique aqui pra assumir.</p>
+  </div>
   <div id="overlay">
     <h2>Clique aqui para ativar o som</h2>
     <p>Necessário uma vez para o navegador liberar a fala em voz alta.</p>
@@ -366,6 +379,23 @@ const SALAS = [
   "Sala de Medicação"
 ];
 const MAX_HISTORICO = 6;
+
+// SUBIR este número a cada deploy. A primeira tela que carrega a versão nova grava o
+// número em painel/versao, e toda tela aberta com número menor recarrega sozinha
+// (consultório na hora; recepção quando não estiver falando). Sem isso, uma aba
+// esquecida em outro PC roda código velho pra sempre.
+const VERSAO = 6;
+
+// Caminhos no banco. RENOMEADOS de propósito em relação às versões antigas (calls/ e
+// estado/): uma recepção antiga esquecida aberta em outro PC — de qualquer versão, até
+// do domínio antigo, já que o banco é o mesmo — escuta os caminhos velhos e por isso
+// nunca mais recebe chamado nenhum. Era uma dessas que roubava a fala da TV.
+const DB = {
+  chamadas: 'chamadas',
+  falando: 'painel/falando',
+  recepcaoAtiva: 'painel/recepcao_ativa',
+  versao: 'painel/versao'
+};
 // ==========================================================
 
 firebase.initializeApp(firebaseConfig);
@@ -395,6 +425,23 @@ function init() {
     mostrarView('picker');
     montarPicker();
   }
+}
+
+// ver comentário em VERSAO. podeRecarregar() diz se é seguro recarregar agora.
+function vigiarVersao(podeRecarregar) {
+  const ref = db.ref(DB.versao);
+  ref.transaction(v => (typeof v === 'number' && v >= VERSAO) ? undefined : VERSAO);
+  let timer = null;
+  ref.on('value', snap => {
+    const v = snap.val();
+    if (!(typeof v === 'number' && v > VERSAO)) return;
+    if (timer) return;
+    const tentar = () => {
+      if (podeRecarregar()) { location.reload(); return; }
+      timer = setTimeout(tentar, 3000);
+    };
+    tentar();
+  });
 }
 
 function escapeHtml(s) {
@@ -454,7 +501,7 @@ function iniciarCaller(sala) {
         return `<div class="hist-sala-item"><span class="h-nome">${escapeHtml(h.nome)}</span><span class="h-hora">${escapeHtml(hora)}</span></div>`;
       }).join('');
   }
-  const historicoSalaRef = db.ref('calls').orderByChild('ts').limitToLast(50);
+  const historicoSalaRef = db.ref(DB.chamadas).orderByChild('ts').limitToLast(50);
   historicoSalaRef.on('child_added', snap => {
     const val = snap.val();
     if (!val || val.sala !== sala) return;
@@ -466,7 +513,7 @@ function iniciarCaller(sala) {
   // bloqueia o botão Chamar enquanto a recepção estiver anunciando outro chamado —
   // impede que 2 chamados se sobreponham na fala
   let ocupado = false;
-  db.ref('estado/falando').on('value', snap => {
+  db.ref(DB.falando).on('value', snap => {
     ocupado = !!snap.val();
     btnChamarEl.disabled = ocupado;
     btnChamarEl.textContent = ocupado ? 'Aguarde...' : 'Chamar';
@@ -482,7 +529,7 @@ function iniciarCaller(sala) {
     if (ocupado) return;
     const nome = inputEl.value.trim();
     if (!nome) { inputEl.focus(); return; }
-    db.ref('calls').push({
+    db.ref(DB.chamadas).push({
       sala: sala,
       nome: nome.toUpperCase(),
       ts: firebase.database.ServerValue.TIMESTAMP
@@ -500,6 +547,7 @@ function iniciarCaller(sala) {
 
   btnChamarEl.onclick = chamar;
   inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') chamar(); });
+  vigiarVersao(() => true);
 }
 
 // ---------------- painel da recepção ----------------
@@ -523,6 +571,75 @@ function iniciarRecepcao() {
   let ultimoChamado = null;
   let mudo = localStorage.getItem('painel_mudo') === '1';
 
+  // SÓ UMA recepção fala. Regra: QUEM JÁ ESTÁ ATIVA FICA. Uma recepção aberta por
+  // engano em outro PC encontra a TV viva e entra em modo espelho (mostra os chamados,
+  // não fala) com aviso; roubar a fala exige clicar no aviso de propósito. A ativa manda
+  // batimento a cada 15s e é apagada do banco quando desconecta — assim, se a TV cair
+  // (F5, energia, rede) a próxima recepção que abrir assume sozinha, sem clique.
+  const minhaId = Math.random().toString(36).slice(2) + '-' + Date.now();
+  const ativaRef = db.ref(DB.recepcaoAtiva);
+  const substituidaEl = document.getElementById('substituida');
+  const substituidaTexto = document.getElementById('substituidaTexto');
+  const BATIMENTO_MS = 15000;
+  const MORTA_APOS_MS = 45000; // 3 batimentos perdidos = considera a outra morta
+  let substituida = false;
+  let batimentoTimer = null;
+  let decidiu = false; // a decisão "assumo ou espelho" é tomada UMA vez, na carga
+
+  function assumirRecepcao() {
+    ativaRef.set({ id: minhaId, ts: firebase.database.ServerValue.TIMESTAMP });
+    ativaRef.onDisconnect().remove();
+    if (!batimentoTimer) {
+      batimentoTimer = setInterval(() => {
+        if (!substituida) ativaRef.update({ ts: firebase.database.ServerValue.TIMESTAMP });
+      }, BATIMENTO_MS);
+    }
+  }
+  function entrarEmEspelho(val) {
+    substituida = true;
+    substituidaEl.classList.add('ativa');
+    const desde = val && val.ts ? new Date(val.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '?';
+    substituidaTexto.textContent = 'Outra tela está ativa como recepção (último sinal às ' + desde + '). Esta só espelha os chamados; quem fala é a outra. Se ESTA é a TV da recepção, clique aqui pra assumir.';
+    if (audioAtual) audioAtual.pause();
+    if (finalizarFalaAtual) finalizarFalaAtual();
+  }
+  let ultimaAtiva = null;
+  function outraEstaViva(val) {
+    return !!(val && val.id && val.id !== minhaId && (Date.now() - (val.ts || 0)) < MORTA_APOS_MS);
+  }
+  function assumirSeAtivaMorreu() {
+    if (substituida && !outraEstaViva(ultimaAtiva)) {
+      substituida = false;
+      substituidaEl.classList.remove('ativa');
+      assumirRecepcao();
+    }
+  }
+  // a ativa pode morrer sem o banco avisar (cabo puxado): o ts só para de avançar, e
+  // nenhum evento 'value' chega — por isso a espelho reavalia sozinha de tempos em tempos
+  setInterval(assumirSeAtivaMorreu, BATIMENTO_MS);
+  ativaRef.on('value', snap => {
+    const val = snap.val();
+    ultimaAtiva = val;
+    const outraViva = outraEstaViva(val);
+    if (!decidiu) {
+      decidiu = true;
+      if (outraViva) entrarEmEspelho(val); else assumirRecepcao();
+      return;
+    }
+    if (!substituida && val && val.id && val.id !== minhaId) {
+      // alguém clicou "assumir" em outra tela — cede
+      entrarEmEspelho(val);
+    } else if (substituida) {
+      // a ativa saiu (ou morreu) — a espelho assume sozinha
+      assumirSeAtivaMorreu();
+    }
+  });
+  substituidaEl.onclick = () => {
+    substituida = false;
+    substituidaEl.classList.remove('ativa');
+    assumirRecepcao();
+  };
+
   function atualizarBotaoMudo() {
     btnMudo.textContent = mudo ? '🔇 Som desligado — clique pra reativar' : '🔊 Silenciar voz';
     btnMudo.classList.toggle('mudo-ativo', mudo);
@@ -534,11 +651,10 @@ function iniciarRecepcao() {
   btnMudo.onclick = () => {
     mudo = !mudo;
     localStorage.setItem('painel_mudo', mudo ? '1' : '0');
-    if (mudo) {
-      if (audioAtual) audioAtual.pause();
-      if (window.speechSynthesis) window.speechSynthesis.cancel();
-      // pause()/cancel() não disparam onended/onerror sozinhos — sem chamar isso aqui, a
-      // trava estado/falando ficaria presa até o timeout de 15s toda vez que mutar no meio
+    if (mudo && audioAtual) {
+      audioAtual.pause();
+      // pause() não dispara onended/onerror sozinho — sem chamar isso aqui, a trava
+      // painel/falando ficaria presa até o timeout de 15s toda vez que mutar no meio
       if (finalizarFalaAtual) finalizarFalaAtual();
     }
     atualizarBotaoMudo();
@@ -552,7 +668,7 @@ function iniciarRecepcao() {
   atualizarRelogio();
   setInterval(atualizarRelogio, 30000);
 
-  statusEl.textContent = 'voz: /tts (Google Tradutor via Worker) + reserva do navegador';
+  statusEl.textContent = 'voz: /tts (Google Tradutor via Worker)';
 
   setInterval(() => { tentarLiberarAudio(); }, 10000);
 
@@ -574,52 +690,42 @@ function iniciarRecepcao() {
     }
   }
 
+  let somLiberado = false;
+  let comoLiberou = 'ainda não';
   function tentarLiberarAudio() {
     const audioEl = document.getElementById('keepAliveAudio');
     if (audioEl) {
-      audioEl.play().catch(err => {
+      audioEl.play().then(() => {
+        // o navegador deixou tocar sem clique (Chrome libera pra sites que tocam som com
+        // frequência) — então não precisa de ninguém clicando no overlay depois de um F5
+        if (!somLiberado) { comoLiberou = 'sozinho (sem clique)'; liberarSom(); }
+      }).catch(err => {
         diagnosticoEl.textContent = 'áudio de fundo bloqueado: ' + (err && err.name ? err.name : err);
       });
     }
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
   }
 
-  overlay.onclick = () => {
-    // toca um áudio SILENCIOSO em loop desde já (mesmo gesto de clique) e deixa rodando
-    // o dia inteiro — estabelece a aba como "produzindo áudio" pro Chrome, o que a política
-    // de autoplay de <audio> aceita mesmo sem gesto recente (diferente do speechSynthesis,
-    // que expira a liberação poucos segundos após o último clique — foi o que causava
-    // "só funciona clicando Repetir na tela": confirmado com foco/visibilidade/áudio de
-    // fundo todos OK e mesmo assim mudo, então a troca aqui é pra áudio real via rede,
-    // que segue a política mais permissiva de <audio>/<video>)
-    iniciarAudioContextSilencioso();
+  // chamado no clique do overlay OU sozinho, se o navegador já libera áudio sem gesto
+  function liberarSom() {
+    somLiberado = true;
+    // toca um áudio SILENCIOSO em loop desde já e deixa rodando o dia inteiro —
+    // estabelece a aba como "produzindo áudio" pro Chrome, o que a política de autoplay
+    // de <audio> aceita mesmo sem gesto recente (diferente do speechSynthesis, que expira
+    // a liberação poucos segundos após o último clique — foi o que causava "só funciona
+    // clicando Repetir na tela")
+    if (!audioCtx) iniciarAudioContextSilencioso();
     tentarLiberarAudio();
     overlay.style.display = 'none';
-  };
+  }
+  overlay.onclick = () => { comoLiberou = 'clique'; liberarSom(); };
+  tentarLiberarAudio();
 
   function textoChamado(chamado) {
     return `Atenção, ${chamado.nome}. Comparecer ao ${chamado.sala}.`;
   }
 
-  // RESERVA: se o áudio de rede falhar (internet da UBS caiu, Worker fora do ar, Google
-  // bloqueou), tenta a voz do próprio navegador. O Chrome pode segurar essa fala se não
-  // houve clique recente — mas é melhor que silêncio, e o timeout de 15s libera a trava.
-  function falarComNavegador(texto, onend) {
-    if (!('speechSynthesis' in window)) { onend(); return; }
-    try {
-      const u = new SpeechSynthesisUtterance(texto);
-      u.lang = 'pt-BR';
-      u.rate = 0.95;
-      u.onend = onend;
-      u.onerror = onend;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(u);
-    } catch (e) {
-      onend();
-    }
-  }
-
-  const estadoRef = db.ref('estado/falando');
+  const estadoRef = db.ref(DB.falando);
   // limpa o estado ao carregar — se a TV foi recarregada no meio de uma fala, ninguém
   // mais vai limpar aquele "true" preso e os consultórios ficariam travados pra sempre
   estadoRef.set(false);
@@ -628,8 +734,15 @@ function iniciarRecepcao() {
   // a desconexão — sem isso, todos os consultórios ficariam travados até alguém notar
   estadoRef.onDisconnect().set(false);
 
+  // cada etapa da fala vira um trecho na linha de diagnóstico (em vez de sobrescrever),
+  // pra dar pra ver na TV onde exatamente uma chamada parou
+  function diag(msg) {
+    diagnosticoEl.textContent += ' | ' + msg;
+  }
+
   function falar(texto, onend) {
     if (mudo) { onend(); return; } // silenciado: não fala e não trava nenhuma sala
+    if (substituida) { onend(); return; } // outra recepção assumiu: só espelha a tela
     const audioElDiag = document.getElementById('keepAliveAudio');
     diagnosticoEl.textContent = `[${new Date().toLocaleTimeString('pt-BR')}] falando "${texto.slice(0,30)}..." — foco=${document.hasFocus()} vis=${document.visibilityState} audioPausado=${audioElDiag ? audioElDiag.paused : 'sem-elemento'} audioCtx=${audioCtx ? audioCtx.state : 'nulo'}`;
     let concluido = false;
@@ -644,42 +757,44 @@ function iniciarRecepcao() {
     finalizarFalaAtual = finalizar;
     // blinda contra falha de rede/carregamento travado — sem isso a trava de "falando"
     // (e o botão Chamar dos consultórios) ficaria presa esperando um áudio que não chega
-    const timeoutId = setTimeout(finalizar, 15000);
+    const timeoutId = setTimeout(() => {
+      diag('TIMEOUT 15s — o áudio não terminou (rede lenta ou /tts sem resposta)');
+      finalizar();
+    }, 15000);
 
-    // eleição atômica: se essa mesma tela (recepção) estiver aberta em 2 abas/PCs por
-    // engano, as duas recebem o mesmo chamado — sem isso, as duas falariam juntas,
-    // sobrepondo o áudio. Só quem vence a transação fala; a outra só sincroniza a tela.
-    estadoRef.transaction(atual => {
-      if (atual) return; // outra aba já assumiu este chamado — não disputa
-      return true;
-    }, (err, ganhou) => {
-      // se o timeout de 15s já desistiu (rede lenta) antes dessa resposta atrasada
-      // chegar, não pode falar agora — falaria um chamado velho por cima do próximo
-      if (concluido) return;
-      if (!ganhou) { finalizar(); return; }
+    // Esta tela é a recepção ativa (eleita em recepcao/ativa) — fala SEM disputar a
+    // trava. A trava aqui só serve pra segurar o botão Chamar dos consultórios. Antes
+    // era uma transação "só fala quem pega a trava primeiro": bastava uma recepção
+    // esquecida aberta em outro lugar (mesmo banco, até de versão antiga do site) pra
+    // ganhar a disputa e deixar a TV muda sem motivo aparente.
+    estadoRef.set(true).catch(err => diag('erro na trava estado/falando: ' + err.message));
 
-      // ÁUDIO REAL tocado por <audio>, servido pela NOSSA origem em /tts (src/worker.js
-      // busca o MP3 no Google Tradutor do lado do servidor). Não é speechSynthesis: o
-      // Chrome exige clique RECENTE (poucos segundos) pra liberar essa fala, mesmo com
-      // foco/aba visível/áudio de fundo tocando (confirmado em teste real), e por isso o
-      // chamado remoto saía mudo. <audio>.play() segue a política de autoplay mais
-      // permissiva (Media Engagement Index), que o áudio de fundo já vinha alimentando.
-      // E não chamar o Google direto daqui: com Referer da nossa página ele responde erro
-      // em vez de MP3, e o <audio> dispara NotSupportedError no play().
-      const url = '/tts?q=' + encodeURIComponent(texto.slice(0, 200));
-      const audio = new Audio(url);
-      audioAtual = audio;
-      let reservaUsada = false; // onerror e play().catch podem disparar os dois pro mesmo erro
-      function usarReserva(motivo) {
-        if (reservaUsada || concluido) return;
-        reservaUsada = true;
-        diagnosticoEl.textContent = motivo + ' — tentando voz do navegador (' + new Date().toLocaleTimeString('pt-BR') + ')';
-        falarComNavegador(texto, finalizar);
-      }
-      audio.onended = finalizar;
-      audio.onerror = () => usarReserva('ERRO no áudio de rede (/tts) — verifique internet dessa tela');
-      audio.play().catch(err => usarReserva('play() do áudio falhou: ' + (err && err.name ? err.name : err)));
-    });
+    // ÁUDIO REAL tocado por <audio>, servido pela NOSSA origem em /tts (src/worker.js
+    // busca o MP3 no Google Tradutor do lado do servidor). Não é speechSynthesis: o
+    // Chrome exige clique RECENTE (poucos segundos) pra liberar essa fala, mesmo com
+    // foco/aba visível/áudio de fundo tocando (confirmado em teste real), e por isso o
+    // chamado remoto saía mudo. <audio>.play() segue a política de autoplay mais
+    // permissiva (Media Engagement Index), que o áudio de fundo já vinha alimentando.
+    // E não chamar o Google direto daqui: com Referer da nossa página ele responde erro
+    // em vez de MP3, e o <audio> dispara NotSupportedError no play().
+    const url = '/tts?q=' + encodeURIComponent(texto.slice(0, 200));
+    const audio = new Audio(url);
+    audioAtual = audio;
+    const t0 = Date.now();
+    audio.onended = () => {
+      diag('terminou em ' + (Date.now() - t0) + 'ms (duração=' + audio.duration.toFixed(1) + 's)');
+      finalizar();
+    };
+    audio.onerror = () => {
+      diag('ERRO no áudio de rede (/tts) — verifique internet dessa tela');
+      finalizar();
+    };
+    audio.play()
+      .then(() => diag('tocando após ' + (Date.now() - t0) + 'ms (som liberado: ' + comoLiberou + ')'))
+      .catch(err => {
+        diag('play() do áudio falhou: ' + (err && err.name ? err.name : err));
+        finalizar();
+      });
   }
 
   function processarFila() {
@@ -716,13 +831,19 @@ function iniciarRecepcao() {
     ).join('');
   }
 
-  const callsRef = db.ref('calls').orderByChild('ts').startAt(Date.now());
-  callsRef.on('child_added', snap => {
+  function receberChamado(snap) {
     const val = snap.val();
     if (!val || !val.nome || !val.sala) return;
     filaChamados.push(val);
     processarFila();
-  });
+  }
+  // NÃO ler o caminho antigo (calls/): uma recepção velha esquecida escuta ele, e as
+  // duas falariam juntas o chamado de um consultório que ainda não recarregou. Esse
+  // consultório precisa de UM F5 — as próximas atualizações são automáticas.
+  const callsRef = db.ref(DB.chamadas).orderByChild('ts').startAt(Date.now());
+  callsRef.on('child_added', receberChamado);
+
+  vigiarVersao(() => !processando && filaChamados.length === 0);
 
   btnRepetir.onclick = () => {
     if (!ultimoChamado || processando) return;
@@ -733,8 +854,10 @@ function iniciarRecepcao() {
   document.getElementById('trocarSalaRecepcao').onclick = () => {
     if (!confirm('Trocar o papel desta tela?')) return;
     callsRef.off();
+    ativaRef.off();
+    clearInterval(batimentoTimer);
+    if (!substituida) { ativaRef.onDisconnect().cancel(); ativaRef.remove(); }
     if (audioAtual) audioAtual.pause();
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
     localStorage.removeItem('papel_tela');
     mostrarView('picker');
     montarPicker();
