@@ -726,9 +726,16 @@ function iniciarCaller(sala) {
   historicoSalaRef.on('child_added', snap => {
     const val = snap.val();
     if (!val || val.sala !== sala) return;
-    historicoSala.unshift(val);
+    historicoSala.unshift({ key: snap.key, ...val });
     historicoSala = historicoSala.slice(0, MAX_HISTORICO_SALA);
     renderHistoricoSala();
+  });
+  // às 18h o Worker apaga todos os chamados do banco (LIMPEZA em src/worker.js);
+  // some da tela também, sem precisar recarregar
+  historicoSalaRef.on('child_removed', snap => {
+    const antes = historicoSala.length;
+    historicoSala = historicoSala.filter(h => h.key !== snap.key);
+    if (historicoSala.length !== antes) renderHistoricoSala();
   });
 
   // bloqueia o botão Chamar enquanto a recepção estiver anunciando outro chamado —
@@ -1127,8 +1134,21 @@ function iniciarRecepcao() {
   function receberChamado(snap) {
     const val = snap.val();
     if (!val || !val.nome || !val.sala) return;
-    filaChamados.push(val);
+    filaChamados.push({ key: snap.key, ...val });
     processarFila();
+  }
+  // limpeza das 18h (Worker apaga tudo em chamadas/): tira da tela também
+  function chamadoApagado(snap) {
+    const antes = historico.length;
+    historico = historico.filter(h => h.key !== snap.key);
+    if (historico.length !== antes) renderHistorico();
+    if (ultimoChamado && ultimoChamado.key === snap.key && !processando) {
+      ultimoChamado = null;
+      btnRepetir.disabled = true;
+      chamandoNomeEl.textContent = 'Aguardando chamada';
+      chamandoNomeEl.classList.add('empty');
+      chamandoSalaEl.textContent = '';
+    }
   }
   // NÃO ler o caminho antigo (calls/): uma recepção velha esquecida escuta ele, e as
   // duas falariam juntas o chamado de um consultório que ainda não recarregou. Esse
@@ -1137,6 +1157,7 @@ function iniciarRecepcao() {
   // atrasado, chamados velhos seriam falados de novo a cada carga da TV
   const callsRef = db.ref(DB.chamadas).orderByChild('ts').startAt(agoraServidor());
   callsRef.on('child_added', receberChamado);
+  callsRef.on('child_removed', chamadoApagado);
 
   vigiarVersao(() => !processando && filaChamados.length === 0);
 

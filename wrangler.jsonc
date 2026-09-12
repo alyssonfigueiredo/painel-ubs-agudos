@@ -15,6 +15,8 @@
     // precisa passar pra sair com Cache-Control: no-store (ver src/worker.js)
     "run_worker_first": ["/versao.js"]
   },
+  // limpeza diária dos chamados às 18h de Brasília (UTC-3, sem horário de verão) = 21:00 UTC
+  "triggers": { "crons": ["0 21 * * *"] },
   "routes": [
     { "pattern": "painel-ubs.soaperando.com.br", "custom_domain": true }
   ]
