@@ -704,50 +704,38 @@ function iniciarRecepcao() {
       finalizar();
     }, 15000);
 
-    // eleição atômica: se essa mesma tela (recepção) estiver aberta em 2 abas/PCs por
-    // engano, as duas recebem o mesmo chamado — sem isso, as duas falariam juntas,
-    // sobrepondo o áudio. Só quem vence a transação fala; a outra só sincroniza a tela.
-    estadoRef.transaction(atual => {
-      if (atual) return; // outra aba já assumiu este chamado — não disputa
-      return true;
-    }, (err, ganhou) => {
-      // se o timeout de 15s já desistiu (rede lenta) antes dessa resposta atrasada
-      // chegar, não pode falar agora — falaria um chamado velho por cima do próximo
-      if (concluido) return;
-      if (err) { diag('erro na trava estado/falando: ' + err.message); finalizar(); return; }
-      if (!ganhou) {
-        // quem perdeu não fala — e precisa dizer isso na tela, senão parece "mudo do nada"
-        diag('OUTRA TELA DE RECEPÇÃO assumiu este chamado (trava ocupada) — feche a recepção duplicada no outro PC/aba');
-        finalizar();
-        return;
-      }
+    // Esta tela é a recepção ativa (eleita em recepcao/ativa) — fala SEM disputar a
+    // trava. A trava aqui só serve pra segurar o botão Chamar dos consultórios. Antes
+    // era uma transação "só fala quem pega a trava primeiro": bastava uma recepção
+    // esquecida aberta em outro lugar (mesmo banco, até de versão antiga do site) pra
+    // ganhar a disputa e deixar a TV muda sem motivo aparente.
+    estadoRef.set(true).catch(err => diag('erro na trava estado/falando: ' + err.message));
 
-      // ÁUDIO REAL tocado por <audio>, servido pela NOSSA origem em /tts (src/worker.js
-      // busca o MP3 no Google Tradutor do lado do servidor). Não é speechSynthesis: o
-      // Chrome exige clique RECENTE (poucos segundos) pra liberar essa fala, mesmo com
-      // foco/aba visível/áudio de fundo tocando (confirmado em teste real), e por isso o
-      // chamado remoto saía mudo. <audio>.play() segue a política de autoplay mais
-      // permissiva (Media Engagement Index), que o áudio de fundo já vinha alimentando.
-      // E não chamar o Google direto daqui: com Referer da nossa página ele responde erro
-      // em vez de MP3, e o <audio> dispara NotSupportedError no play().
-      const url = '/tts?q=' + encodeURIComponent(texto.slice(0, 200));
-      const audio = vozAudio; // reaproveita o elemento destravado — nunca new Audio()
-      audioAtual = audio;
-      let reservaUsada = false; // onerror e play().catch podem disparar os dois pro mesmo erro
-      function usarReserva(motivo) {
-        if (reservaUsada || concluido) return;
-        reservaUsada = true;
-        diag(motivo + ' — tentando voz do navegador');
-        falarComNavegador(texto, finalizar);
-      }
-      audio.onended = () => { diag('terminou'); finalizar(); };
-      audio.onerror = () => usarReserva('ERRO no áudio de rede (/tts) — verifique internet dessa tela');
-      audio.src = url;
-      audio.load();
-      audio.play()
-        .then(() => diag('tocando (volume=' + audio.volume + ' muted=' + audio.muted + ')'))
-        .catch(err => usarReserva('play() do áudio falhou: ' + (err && err.name ? err.name : err)));
-    });
+    // ÁUDIO REAL tocado por <audio>, servido pela NOSSA origem em /tts (src/worker.js
+    // busca o MP3 no Google Tradutor do lado do servidor). Não é speechSynthesis: o
+    // Chrome exige clique RECENTE (poucos segundos) pra liberar essa fala, mesmo com
+    // foco/aba visível/áudio de fundo tocando (confirmado em teste real), e por isso o
+    // chamado remoto saía mudo. <audio>.play() segue a política de autoplay mais
+    // permissiva (Media Engagement Index), que o áudio de fundo já vinha alimentando.
+    // E não chamar o Google direto daqui: com Referer da nossa página ele responde erro
+    // em vez de MP3, e o <audio> dispara NotSupportedError no play().
+    const url = '/tts?q=' + encodeURIComponent(texto.slice(0, 200));
+    const audio = vozAudio; // reaproveita o elemento destravado — nunca new Audio()
+    audioAtual = audio;
+    let reservaUsada = false; // onerror e play().catch podem disparar os dois pro mesmo erro
+    function usarReserva(motivo) {
+      if (reservaUsada || concluido) return;
+      reservaUsada = true;
+      diag(motivo + ' — tentando voz do navegador');
+      falarComNavegador(texto, finalizar);
+    }
+    audio.onended = () => { diag('terminou'); finalizar(); };
+    audio.onerror = () => usarReserva('ERRO no áudio de rede (/tts) — verifique internet dessa tela');
+    audio.src = url;
+    audio.load();
+    audio.play()
+      .then(() => diag('tocando (volume=' + audio.volume + ' muted=' + audio.muted + ')'))
+      .catch(err => usarReserva('play() do áudio falhou: ' + (err && err.name ? err.name : err)));
   }
 
   function processarFila() {
