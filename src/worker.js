@@ -1,56 +1,70 @@
 // Worker na frente dos assets estáticos de ./public. Só uma rota é tratada aqui:
-// /tts?q=TEXTO — busca o MP3 no endpoint do Google Tradutor DO LADO DO SERVIDOR e
-// devolve como áudio da nossa própria origem. Chamar o Google direto do navegador
-// falha: com Referer de outra página ele responde erro (corpo não-áudio) e o <audio>
-// da recepção dispara NotSupportedError no play(). Pelo Worker não há Referer de
-// navegador nem problema de origem. Todo o resto cai nos assets (env.ASSETS).
+// /tts?q=TEXTO — gera o MP3 na Google Cloud Text-to-Speech (voz masculina Chirp 3 HD
+// "Orus") DO LADO DO SERVIDOR, com a chave guardada como secret (GOOGLE_TTS_KEY), e
+// devolve como áudio da nossa própria origem. Cota grátis: 1 milhão de caracteres/mês;
+// mesma frase é servida do cache da borda sem gastar de novo. Se a chave faltar, a cota
+// estourar ou a API falhar, responde 5xx e a recepção cai na voz do navegador.
+// Todo o resto cai nos assets (env.ASSETS).
 
-const TTS_UPSTREAM = 'https://translate.google.com/translate_tts';
+const TTS_API = 'https://texttospeech.googleapis.com/v1beta1/text:synthesize';
 const TTS_LANG = 'pt-BR';
-const TTS_MAX_CHARS = 200; // limite do endpoint por requisição
-const TTS_CACHE_SECONDS = 60 * 60 * 24 * 7;
+const TTS_VOZ = 'pt-BR-Chirp3-HD-Orus';
+const TTS_MAX_CHARS = 200;
+const TTS_CACHE_SECONDS = 60 * 60 * 24 * 30;
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    if (url.pathname === '/tts') return tts(url, ctx);
+    if (url.pathname === '/tts') return tts(url, env, ctx);
     return env.ASSETS.fetch(request);
   }
 };
 
-async function tts(url, ctx) {
-  const texto = (url.searchParams.get('q') || '').trim().slice(0, TTS_MAX_CHARS);
-  if (!texto) return new Response('faltou q', { status: 400 });
+function erro(status, msg) {
+  return new Response(msg, { status, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
+}
 
-  // mesma frase → mesmo MP3: cacheia na borda pra não bater no Google a cada "Repetir"
+async function tts(url, env, ctx) {
+  const texto = (url.searchParams.get('q') || '').trim().slice(0, TTS_MAX_CHARS);
+  if (!texto) return erro(400, 'faltou q');
+  // trim: colar a chave no terminal costuma trazer quebra de linha/espaço no fim
+  const chaveApi = (env.GOOGLE_TTS_KEY || '').trim();
+  if (!chaveApi) return erro(503, 'GOOGLE_TTS_KEY não configurada (npx wrangler secret put GOOGLE_TTS_KEY)');
+
   const cache = caches.default;
-  const chave = new Request('https://tts.painel-ubs.local/' + TTS_LANG + '/' + encodeURIComponent(texto));
+  const chave = new Request('https://tts.painel-ubs.local/' + TTS_VOZ + '/' + encodeURIComponent(texto));
   const emCache = await cache.match(chave);
   if (emCache) return emCache;
 
-  const upstream = TTS_UPSTREAM + '?ie=UTF-8&client=tw-ob&tl=' + TTS_LANG + '&q=' + encodeURIComponent(texto);
   let res;
   try {
-    res = await fetch(upstream, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36',
-        'Referer': 'https://translate.google.com/',
-        'Accept': 'audio/mpeg,*/*'
-      }
+    res = await fetch(TTS_API + '?key=' + encodeURIComponent(chaveApi), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        input: { text: texto },
+        voice: { languageCode: TTS_LANG, name: TTS_VOZ },
+        audioConfig: { audioEncoding: 'MP3', speakingRate: 1.0 }
+      })
     });
   } catch (e) {
-    return new Response('falha ao contatar o TTS: ' + e.message, { status: 502 });
+    return erro(502, 'falha ao contatar a Google TTS: ' + e.message);
   }
-  const tipo = res.headers.get('content-type') || '';
-  if (!res.ok || !tipo.startsWith('audio/')) {
-    return new Response('TTS respondeu ' + res.status + ' ' + tipo, { status: 502 });
+  if (!res.ok) {
+    const corpo = await res.text();
+    // 429 = cota do mês estourada; 403 = API desativada/faturamento off; 400 = chave inválida
+    return erro(502, 'Google TTS ' + res.status + ' (chave com ' + chaveApi.length + ' caracteres, começa com ' + chaveApi.slice(0, 4) + '): ' + corpo.slice(0, 300));
   }
+  const json = await res.json();
+  if (!json.audioContent) return erro(502, 'Google TTS sem audioContent');
+  const bin = atob(json.audioContent);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
 
-  const corpo = await res.arrayBuffer();
-  const resposta = new Response(corpo, {
+  const resposta = new Response(bytes, {
     headers: {
       'Content-Type': 'audio/mpeg',
-      'Content-Length': String(corpo.byteLength),
+      'Content-Length': String(bytes.length),
       'Cache-Control': 'public, max-age=' + TTS_CACHE_SECONDS
     }
   });
