@@ -313,7 +313,6 @@
 <!-- ============ RECEPÇÃO (espelho na TV) ============ -->
 <div id="view-recepcao" class="view">
   <audio id="keepAliveAudio" loop preload="auto" src="data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA=="></audio>
-  <audio id="vozAudio" preload="auto"></audio>
   <div id="substituida">
     <h2 id="substituidaTitulo">Já existe uma recepção ativa</h2>
     <p id="substituidaTexto">Esta tela só espelha os chamados; quem fala é a outra. Se ESTA é a TV da recepção, clique aqui pra assumir.</p>
@@ -385,7 +384,7 @@ const MAX_HISTORICO = 6;
 // número em painel/versao, e toda tela aberta com número menor recarrega sozinha
 // (consultório na hora; recepção quando não estiver falando). Sem isso, uma aba
 // esquecida em outro PC roda código velho pra sempre.
-const VERSAO = 5;
+const VERSAO = 6;
 
 // Caminhos no banco. RENOMEADOS de propósito em relação às versões antigas (calls/ e
 // estado/): uma recepção antiga esquecida aberta em outro PC — de qualquer versão, até
@@ -567,12 +566,7 @@ function iniciarRecepcao() {
   let filaChamados = [];
   let processando = false;
   let historico = [];
-  // UM único <audio> pra fala, destravado no clique do overlay e reaproveitado em toda
-  // chamada (só troca o src). Um new Audio() criado fora de um clique NÃO herda a
-  // liberação de autoplay em todo navegador — foi o que deixou o som saindo só no
-  // botão Repetir (clique fresco) e mudo no chamado que chega sozinho.
-  const vozAudio = document.getElementById('vozAudio');
-  let audioAtual = null; // <audio> da fala em andamento, pra dar pause() se mutar no meio
+  let audioAtual = null; // Audio() da fala em andamento, pra dar pause() se mutar no meio
   let finalizarFalaAtual = null; // libera a trava estado/falando — pause() sozinho NÃO dispara onended/onerror
   let ultimoChamado = null;
   let mudo = localStorage.getItem('painel_mudo') === '1';
@@ -607,7 +601,6 @@ function iniciarRecepcao() {
     const desde = val && val.ts ? new Date(val.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '?';
     substituidaTexto.textContent = 'Outra tela está ativa como recepção (último sinal às ' + desde + '). Esta só espelha os chamados; quem fala é a outra. Se ESTA é a TV da recepção, clique aqui pra assumir.';
     if (audioAtual) audioAtual.pause();
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
     if (finalizarFalaAtual) finalizarFalaAtual();
   }
   let ultimaAtiva = null;
@@ -658,11 +651,10 @@ function iniciarRecepcao() {
   btnMudo.onclick = () => {
     mudo = !mudo;
     localStorage.setItem('painel_mudo', mudo ? '1' : '0');
-    if (mudo) {
-      if (audioAtual) audioAtual.pause();
-      if (window.speechSynthesis) window.speechSynthesis.cancel();
-      // pause()/cancel() não disparam onended/onerror sozinhos — sem chamar isso aqui, a
-      // trava estado/falando ficaria presa até o timeout de 15s toda vez que mutar no meio
+    if (mudo && audioAtual) {
+      audioAtual.pause();
+      // pause() não dispara onended/onerror sozinho — sem chamar isso aqui, a trava
+      // painel/falando ficaria presa até o timeout de 15s toda vez que mutar no meio
       if (finalizarFalaAtual) finalizarFalaAtual();
     }
     atualizarBotaoMudo();
@@ -676,7 +668,7 @@ function iniciarRecepcao() {
   atualizarRelogio();
   setInterval(atualizarRelogio, 30000);
 
-  statusEl.textContent = 'voz: /tts (Google Tradutor via Worker) + reserva do navegador';
+  statusEl.textContent = 'voz: /tts (Google Tradutor via Worker)';
 
   setInterval(() => { tentarLiberarAudio(); }, 10000);
 
@@ -724,13 +716,6 @@ function iniciarRecepcao() {
     // clicando Repetir na tela")
     if (!audioCtx) iniciarAudioContextSilencioso();
     tentarLiberarAudio();
-    // destrava o elemento da voz: toca o wav silencioso nele e pausa. A partir daqui o
-    // navegador aceita play() nesse mesmo elemento sem clique novo.
-    const silencio = document.getElementById('keepAliveAudio').getAttribute('src');
-    vozAudio.src = silencio;
-    vozAudio.play().then(() => { vozAudio.pause(); }).catch(err => {
-      diagnosticoEl.textContent = 'não destravou a voz: ' + (err && err.name ? err.name : err);
-    });
     overlay.style.display = 'none';
   }
   overlay.onclick = () => { comoLiberou = 'clique'; liberarSom(); };
@@ -738,24 +723,6 @@ function iniciarRecepcao() {
 
   function textoChamado(chamado) {
     return `Atenção, ${chamado.nome}. Comparecer ao ${chamado.sala}.`;
-  }
-
-  // RESERVA: se o áudio de rede falhar (internet da UBS caiu, Worker fora do ar, Google
-  // bloqueou), tenta a voz do próprio navegador. O Chrome pode segurar essa fala se não
-  // houve clique recente — mas é melhor que silêncio, e o timeout de 15s libera a trava.
-  function falarComNavegador(texto, onend) {
-    if (!('speechSynthesis' in window)) { onend(); return; }
-    try {
-      const u = new SpeechSynthesisUtterance(texto);
-      u.lang = 'pt-BR';
-      u.rate = 0.95;
-      u.onend = onend;
-      u.onerror = onend;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(u);
-    } catch (e) {
-      onend();
-    }
   }
 
   const estadoRef = db.ref(DB.falando);
@@ -811,26 +778,23 @@ function iniciarRecepcao() {
     // E não chamar o Google direto daqui: com Referer da nossa página ele responde erro
     // em vez de MP3, e o <audio> dispara NotSupportedError no play().
     const url = '/tts?q=' + encodeURIComponent(texto.slice(0, 200));
-    const audio = vozAudio; // reaproveita o elemento destravado — nunca new Audio()
+    const audio = new Audio(url);
     audioAtual = audio;
-    let reservaUsada = false; // onerror e play().catch podem disparar os dois pro mesmo erro
-    function usarReserva(motivo) {
-      if (reservaUsada || concluido) return;
-      reservaUsada = true;
-      diag(motivo + ' — tentando voz do navegador');
-      falarComNavegador(texto, finalizar);
-    }
     const t0 = Date.now();
     audio.onended = () => {
-      diag('terminou em ' + (Date.now() - t0) + 'ms (duração=' + audio.duration.toFixed(1) + 's pos=' + audio.currentTime.toFixed(1) + 's)');
+      diag('terminou em ' + (Date.now() - t0) + 'ms (duração=' + audio.duration.toFixed(1) + 's)');
       finalizar();
     };
-    audio.onerror = () => usarReserva('ERRO no áudio de rede (/tts) — verifique internet dessa tela');
-    audio.src = url;
-    audio.load();
+    audio.onerror = () => {
+      diag('ERRO no áudio de rede (/tts) — verifique internet dessa tela');
+      finalizar();
+    };
     audio.play()
-      .then(() => diag('tocando após ' + (Date.now() - t0) + 'ms (volume=' + audio.volume + ' muted=' + audio.muted + ' readyState=' + audio.readyState + ' som liberado: ' + comoLiberou + ')'))
-      .catch(err => usarReserva('play() do áudio falhou: ' + (err && err.name ? err.name : err)));
+      .then(() => diag('tocando após ' + (Date.now() - t0) + 'ms (som liberado: ' + comoLiberou + ')'))
+      .catch(err => {
+        diag('play() do áudio falhou: ' + (err && err.name ? err.name : err));
+        finalizar();
+      });
   }
 
   function processarFila() {
@@ -894,7 +858,6 @@ function iniciarRecepcao() {
     clearInterval(batimentoTimer);
     if (!substituida) { ativaRef.onDisconnect().cancel(); ativaRef.remove(); }
     if (audioAtual) audioAtual.pause();
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
     localStorage.removeItem('papel_tela');
     mostrarView('picker');
     montarPicker();
