@@ -232,6 +232,15 @@
   }
   #overlay h2 { font-size: 26px; margin-bottom: 10px; }
   #overlay p { color: var(--text-dim); }
+  #substituida {
+    position: fixed; inset: 0;
+    background: rgba(6,18,16,0.94);
+    display: none; align-items: center; justify-content: center; flex-direction: column;
+    z-index: 998; cursor: pointer; text-align: center; padding: 20px;
+  }
+  #substituida.ativa { display: flex; }
+  #substituida h2 { font-size: 26px; margin-bottom: 10px; color: var(--yellow); }
+  #substituida p { color: var(--text-dim); max-width: 520px; }
   #status { position: fixed; bottom: 8px; right: 14px; font-size: 11px; color: var(--text-dim); opacity:.6; }
   #diagnostico { position: fixed; bottom: 26px; right: 14px; font-size: 11px; color: var(--yellow); max-width: 340px; text-align: right; }
   #trocarSalaRecepcao {
@@ -305,6 +314,10 @@
 <div id="view-recepcao" class="view">
   <audio id="keepAliveAudio" loop preload="auto" src="data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA=="></audio>
   <audio id="vozAudio" preload="auto"></audio>
+  <div id="substituida">
+    <h2>Outra recepção foi aberta</h2>
+    <p>Esta tela parou de falar pra não disputar o áudio com a outra. Se ESTA é a TV da recepção, clique aqui pra assumir de volta.</p>
+  </div>
   <div id="overlay">
     <h2>Clique aqui para ativar o som</h2>
     <p>Necessário uma vez para o navegador liberar a fala em voz alta.</p>
@@ -529,6 +542,28 @@ function iniciarRecepcao() {
   let ultimoChamado = null;
   let mudo = localStorage.getItem('painel_mudo') === '1';
 
+  // SÓ UMA recepção fala. Se o site ficar aberto como recepção em 2 lugares (uma aba
+  // esquecida no notebook, por ex.), as duas disputam a trava estado/falando e a que
+  // perde fica muda "do nada". Regra: a ÚLTIMA aberta assume; a antiga vê o aviso e
+  // para de disputar. Clicar no aviso reassume (útil se a TV é que foi substituída).
+  const minhaId = Math.random().toString(36).slice(2) + '-' + Date.now();
+  const ativaRef = db.ref('recepcao/ativa');
+  const substituidaEl = document.getElementById('substituida');
+  let substituida = false;
+  function assumirRecepcao() {
+    ativaRef.set({ id: minhaId, ts: firebase.database.ServerValue.TIMESTAMP });
+  }
+  assumirRecepcao();
+  ativaRef.on('value', snap => {
+    const val = snap.val();
+    substituida = !!(val && val.id && val.id !== minhaId);
+    substituidaEl.classList.toggle('ativa', substituida);
+    if (substituida && audioAtual) audioAtual.pause();
+    if (substituida && window.speechSynthesis) window.speechSynthesis.cancel();
+    if (substituida && finalizarFalaAtual) finalizarFalaAtual();
+  });
+  substituidaEl.onclick = assumirRecepcao;
+
   function atualizarBotaoMudo() {
     btnMudo.textContent = mudo ? '🔇 Som desligado — clique pra reativar' : '🔊 Silenciar voz';
     btnMudo.classList.toggle('mudo-ativo', mudo);
@@ -649,6 +684,7 @@ function iniciarRecepcao() {
 
   function falar(texto, onend) {
     if (mudo) { onend(); return; } // silenciado: não fala e não trava nenhuma sala
+    if (substituida) { onend(); return; } // outra recepção assumiu: só espelha a tela
     const audioElDiag = document.getElementById('keepAliveAudio');
     diagnosticoEl.textContent = `[${new Date().toLocaleTimeString('pt-BR')}] falando "${texto.slice(0,30)}..." — foco=${document.hasFocus()} vis=${document.visibilityState} audioPausado=${audioElDiag ? audioElDiag.paused : 'sem-elemento'} audioCtx=${audioCtx ? audioCtx.state : 'nulo'}`;
     let concluido = false;
@@ -765,6 +801,7 @@ function iniciarRecepcao() {
   document.getElementById('trocarSalaRecepcao').onclick = () => {
     if (!confirm('Trocar o papel desta tela?')) return;
     callsRef.off();
+    ativaRef.off();
     if (audioAtual) audioAtual.pause();
     if (window.speechSynthesis) window.speechSynthesis.cancel();
     localStorage.removeItem('papel_tela');
