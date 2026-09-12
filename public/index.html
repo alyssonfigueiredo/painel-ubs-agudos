@@ -304,6 +304,7 @@
 <!-- ============ RECEPÇÃO (espelho na TV) ============ -->
 <div id="view-recepcao" class="view">
   <audio id="keepAliveAudio" loop preload="auto" src="data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA=="></audio>
+  <audio id="vozAudio" preload="auto"></audio>
   <div id="overlay">
     <h2>Clique aqui para ativar o som</h2>
     <p>Necessário uma vez para o navegador liberar a fala em voz alta.</p>
@@ -518,7 +519,12 @@ function iniciarRecepcao() {
   let filaChamados = [];
   let processando = false;
   let historico = [];
-  let audioAtual = null; // Audio() da fala em andamento, pra dar pause() se mutar no meio
+  // UM único <audio> pra fala, destravado no clique do overlay e reaproveitado em toda
+  // chamada (só troca o src). Um new Audio() criado fora de um clique NÃO herda a
+  // liberação de autoplay em todo navegador — foi o que deixou o som saindo só no
+  // botão Repetir (clique fresco) e mudo no chamado que chega sozinho.
+  const vozAudio = document.getElementById('vozAudio');
+  let audioAtual = null; // <audio> da fala em andamento, pra dar pause() se mutar no meio
   let finalizarFalaAtual = null; // libera a trava estado/falando — pause() sozinho NÃO dispara onended/onerror
   let ultimoChamado = null;
   let mudo = localStorage.getItem('painel_mudo') === '1';
@@ -594,6 +600,13 @@ function iniciarRecepcao() {
     // que segue a política mais permissiva de <audio>/<video>)
     iniciarAudioContextSilencioso();
     tentarLiberarAudio();
+    // destrava o elemento da voz DENTRO do gesto: toca o wav silencioso nele e pausa. A
+    // partir daqui o navegador aceita play() nesse mesmo elemento sem clique novo.
+    const silencio = document.getElementById('keepAliveAudio').getAttribute('src');
+    vozAudio.src = silencio;
+    vozAudio.play().then(() => { vozAudio.pause(); }).catch(err => {
+      diagnosticoEl.textContent = 'não destravou a voz: ' + (err && err.name ? err.name : err);
+    });
     overlay.style.display = 'none';
   };
 
@@ -667,7 +680,7 @@ function iniciarRecepcao() {
       // E não chamar o Google direto daqui: com Referer da nossa página ele responde erro
       // em vez de MP3, e o <audio> dispara NotSupportedError no play().
       const url = '/tts?q=' + encodeURIComponent(texto.slice(0, 200));
-      const audio = new Audio(url);
+      const audio = vozAudio; // reaproveita o elemento destravado — nunca new Audio()
       audioAtual = audio;
       let reservaUsada = false; // onerror e play().catch podem disparar os dois pro mesmo erro
       function usarReserva(motivo) {
@@ -678,6 +691,8 @@ function iniciarRecepcao() {
       }
       audio.onended = finalizar;
       audio.onerror = () => usarReserva('ERRO no áudio de rede (/tts) — verifique internet dessa tela');
+      audio.src = url;
+      audio.load();
       audio.play().catch(err => usarReserva('play() do áudio falhou: ' + (err && err.name ? err.name : err)));
     });
   }
