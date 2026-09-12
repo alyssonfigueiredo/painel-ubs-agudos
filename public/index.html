@@ -872,8 +872,16 @@ function iniciarRecepcao() {
   overlay.onclick = () => { comoLiberou = 'clique'; liberarSom(); };
   tentarLiberarAudio();
 
+  // texto pra FALA (a tela continua em maiúsculas): nome todo em maiúsculas o TTS lê
+  // como sigla, soletrando; "01" vira "zero um". Ajusta só o que vai pra voz.
+  function paraFala(texto) {
+    return String(texto)
+      .toLowerCase()
+      .replace(/(^|[\s\-])(\S)/g, (m, sep, c) => sep + c.toUpperCase())
+      .replace(/\b0+(\d)/g, '$1');
+  }
   function textoChamado(chamado) {
-    return `Atenção, ${chamado.nome}. Comparecer ao ${chamado.sala}.`;
+    return `Atenção, ${paraFala(chamado.nome)}. Comparecer ao ${paraFala(chamado.sala)}.`;
   }
 
   const estadoRef = db.ref(DB.falando);
