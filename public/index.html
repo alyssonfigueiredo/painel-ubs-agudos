@@ -251,11 +251,6 @@
   #status { position: fixed; bottom: 8px; right: 14px; font-size: 11px; color: var(--text-dim); opacity:.6; display: none; }
   #diagnostico { position: fixed; bottom: 26px; right: 14px; font-size: 11px; color: var(--yellow); max-width: 340px; text-align: right; display: none; }
   body.mostrar-diag #status, body.mostrar-diag #diagnostico { display: block; }
-  .voz-sel { margin-top: 10px; display: flex; justify-content: flex-end; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); }
-  .voz-sel select {
-    background: var(--bg); color: var(--text); border: 1px solid var(--line);
-    border-radius: 8px; padding: 6px 10px; font-family: inherit; font-size: 12px; max-width: 260px;
-  }
   #trocarSalaRecepcao {
     margin-top: 14px;
     margin-left: 8px;
@@ -349,7 +344,6 @@
         <div class="date" id="data"></div>
         <button id="btnMudo" class="mudo-btn">🔊 Silenciar voz</button>
         <button id="trocarSalaRecepcao">🔄 Trocar tela / sala</button>
-        <div class="voz-sel"><label for="selVoz">Voz</label><select id="selVoz"></select></div>
       </div>
     </header>
     <div class="grid">
@@ -403,7 +397,7 @@ const REPETICOES_CHAMADO = 2; // quantas vezes a recepção anuncia cada chamado
 // número em painel/versao, e toda tela aberta com número menor recarrega sozinha
 // (consultório na hora; recepção quando não estiver falando). Sem isso, uma aba
 // esquecida em outro PC roda código velho pra sempre.
-const VERSAO = 8;
+const VERSAO = 9;
 
 // Caminhos no banco. RENOMEADOS de propósito em relação às versões antigas (calls/ e
 // estado/): uma recepção antiga esquecida aberta em outro PC — de qualquer versão, até
@@ -417,11 +411,10 @@ const DB = {
   versao: 'painel/versao'
 };
 
-// Voz da recepção: a do próprio navegador/Windows, como na versão original (no Windows
-// é a masculina "Microsoft Daniel"). Entre as vozes em português, prefere a que casar
-// com este padrão; se nenhuma casar, pega a primeira pt-BR. Se o navegador negar ou
-// não tiver voz em português, cai no /tts do Google (áudio via Worker).
-const VOZ_PREFERIDA = /daniel|felipe|ricardo|thiago|ant[oô]nio|male|masc/i;
+// Voz da recepção: a padrão do próprio navegador/sistema pra pt-BR, exatamente como na
+// versão original (sem escolher voz — escolher mudava a voz de um PC pro outro). Se o
+// navegador negar ou a fala não começar, cai no /tts do Google (áudio via Worker).
+const VOZ_LANG = 'pt-BR';
 // ==========================================================
 
 firebase.initializeApp(firebaseConfig);
@@ -747,57 +740,21 @@ function iniciarRecepcao() {
   atualizarRelogio();
   setInterval(atualizarRelogio, 30000);
 
-  // Voz escolhida no seletor da tela (salva neste PC). Sem escolha, usa VOZ_PREFERIDA
-  // entre as vozes em português; "/tts" força o áudio do Google via Worker.
-  const selVoz = document.getElementById('selVoz');
-  const VOZ_TTS = '/tts';
-  function vozesPt() {
-    if (!window.speechSynthesis) return [];
-    return speechSynthesis.getVoices().filter(v => /^pt([-_]|$)/i.test(v.lang));
-  }
-  function escolherVoz() {
-    const pt = vozesPt();
-    let salva = null;
-    try { salva = localStorage.getItem('painel_voz'); } catch (e) {}
-    if (salva === VOZ_TTS) return null;
-    if (salva) { const v = pt.find(v => v.name === salva); if (v) return v; }
-    if (pt.length === 0) return null;
-    return pt.find(v => VOZ_PREFERIDA.test(v.name)) || pt.find(v => /br/i.test(v.lang)) || pt[0];
-  }
-  function montarSeletorVoz() {
-    const pt = vozesPt();
-    const atual = escolherVoz();
-    selVoz.innerHTML = '';
-    pt.forEach(v => {
-      const o = document.createElement('option');
-      o.value = v.name;
-      o.textContent = v.name + ' (' + v.lang + ')';
-      selVoz.appendChild(o);
-    });
-    const oTts = document.createElement('option');
-    oTts.value = VOZ_TTS;
-    oTts.textContent = 'Google (áudio pela internet)';
-    selVoz.appendChild(oTts);
-    selVoz.value = atual ? atual.name : VOZ_TTS;
-    statusEl.textContent = 'voz: ' + (atual ? atual.name + ' (navegador)' : '/tts (Google via Worker)');
-  }
-  selVoz.onchange = () => {
-    try { localStorage.setItem('painel_voz', selVoz.value); } catch (e) {}
-    montarSeletorVoz();
-    aquecerVoz();
-  };
-  montarSeletorVoz();
-  // a lista de vozes chega depois da carga em alguns navegadores
-  if (window.speechSynthesis) speechSynthesis.onvoiceschanged = montarSeletorVoz;
+  statusEl.textContent = 'voz: padrão do navegador (' + VOZ_LANG + '), reserva /tts';
   let utteranceAtual = null; // o Chrome perde onend/onerror se o objeto for coletado no meio
+
+  function novaFala(texto) {
+    const u = new SpeechSynthesisUtterance(texto);
+    u.lang = VOZ_LANG; // sem u.voice de propósito: fica a padrão do sistema, como antes
+    return u;
+  }
 
   // a 1ª fala do dia demora pra começar (carrega o motor da voz). Fala uma sílaba em
   // volume zero pra deixar pronto — assim o chamado real não estoura a guarda de tempo.
   function aquecerVoz() {
-    const voz = escolherVoz();
-    if (!voz) return;
-    const u = new SpeechSynthesisUtterance('a');
-    u.voice = voz; u.lang = voz.lang; u.volume = 0;
+    if (!window.speechSynthesis) return;
+    const u = novaFala('a');
+    u.volume = 0;
     utteranceAtual = u;
     speechSynthesis.speak(u);
   }
@@ -805,11 +762,8 @@ function iniciarRecepcao() {
   // fala com a voz do navegador; aoFalhar(motivo) se não der (negado por falta de clique,
   // sem voz em português, ou travou sem começar em 2s) — aí o chamador usa o /tts
   function falarComNavegador(texto, aoTerminar, aoFalhar) {
-    const voz = escolherVoz();
-    if (!voz) { aoFalhar('sem voz em português no navegador'); return; }
-    const u = new SpeechSynthesisUtterance(texto);
-    u.voice = voz;
-    u.lang = voz.lang;
+    if (!window.speechSynthesis) { aoFalhar('navegador sem speechSynthesis'); return; }
+    const u = novaFala(texto);
     u.rate = 0.95;
     let comecou = false;
     let falhou = false;
@@ -819,7 +773,7 @@ function iniciarRecepcao() {
       speechSynthesis.cancel();
       aoFalhar('voz do navegador não começou em 5s');
     }, 5000);
-    u.onstart = () => { comecou = true; clearTimeout(guarda); diag('falando com ' + voz.name); };
+    u.onstart = () => { comecou = true; clearTimeout(guarda); diag('falando com a voz do navegador' + (u.voice ? ' (' + u.voice.name + ')' : '')); };
     u.onend = () => { if (comecou && !falhou) aoTerminar(); };
     u.onerror = e => {
       clearTimeout(guarda);
@@ -872,11 +826,10 @@ function iniciarRecepcao() {
 
   let testandoVoz = false;
   function testarVozDoNavegador() {
-    const voz = escolherVoz();
-    if (!voz) { comoLiberou = 'sozinho (sem clique, só /tts)'; liberarSom(); return; }
+    if (!window.speechSynthesis) { comoLiberou = 'sozinho (sem clique, só /tts)'; liberarSom(); return; }
     testandoVoz = true;
-    const u = new SpeechSynthesisUtterance('a');
-    u.voice = voz; u.lang = voz.lang; u.volume = 0;
+    const u = novaFala('a');
+    u.volume = 0;
     const fim = setTimeout(() => { testandoVoz = false; }, 6000);
     u.onend = () => { clearTimeout(fim); testandoVoz = false; if (!somLiberado) { comoLiberou = 'sozinho (sem clique)'; liberarSom(); } };
     u.onerror = e => { clearTimeout(fim); testandoVoz = false; diag('voz do navegador sem clique: ' + e.error + ' — overlay fica'); };
