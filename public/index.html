@@ -315,8 +315,8 @@
   <audio id="keepAliveAudio" loop preload="auto" src="data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA=="></audio>
   <audio id="vozAudio" preload="auto"></audio>
   <div id="substituida">
-    <h2>Outra recepção foi aberta</h2>
-    <p>Esta tela parou de falar pra não disputar o áudio com a outra. Se ESTA é a TV da recepção, clique aqui pra assumir de volta.</p>
+    <h2 id="substituidaTitulo">Já existe uma recepção ativa</h2>
+    <p id="substituidaTexto">Esta tela só espelha os chamados; quem fala é a outra. Se ESTA é a TV da recepção, clique aqui pra assumir.</p>
   </div>
   <div id="overlay">
     <h2>Clique aqui para ativar o som</h2>
@@ -385,7 +385,7 @@ const MAX_HISTORICO = 6;
 // número em painel/versao, e toda tela aberta com número menor recarrega sozinha
 // (consultório na hora; recepção quando não estiver falando). Sem isso, uma aba
 // esquecida em outro PC roda código velho pra sempre.
-const VERSAO = 2;
+const VERSAO = 3;
 
 // Caminhos no banco. RENOMEADOS de propósito em relação às versões antigas (calls/ e
 // estado/): uma recepção antiga esquecida aberta em outro PC — de qualquer versão, até
@@ -578,27 +578,75 @@ function iniciarRecepcao() {
   let ultimoChamado = null;
   let mudo = localStorage.getItem('painel_mudo') === '1';
 
-  // SÓ UMA recepção fala. Se o site ficar aberto como recepção em 2 lugares (uma aba
-  // esquecida no notebook, por ex.), as duas disputam a trava estado/falando e a que
-  // perde fica muda "do nada". Regra: a ÚLTIMA aberta assume; a antiga vê o aviso e
-  // para de disputar. Clicar no aviso reassume (útil se a TV é que foi substituída).
+  // SÓ UMA recepção fala. Regra: QUEM JÁ ESTÁ ATIVA FICA. Uma recepção aberta por
+  // engano em outro PC encontra a TV viva e entra em modo espelho (mostra os chamados,
+  // não fala) com aviso; roubar a fala exige clicar no aviso de propósito. A ativa manda
+  // batimento a cada 15s e é apagada do banco quando desconecta — assim, se a TV cair
+  // (F5, energia, rede) a próxima recepção que abrir assume sozinha, sem clique.
   const minhaId = Math.random().toString(36).slice(2) + '-' + Date.now();
   const ativaRef = db.ref(DB.recepcaoAtiva);
   const substituidaEl = document.getElementById('substituida');
+  const substituidaTexto = document.getElementById('substituidaTexto');
+  const BATIMENTO_MS = 15000;
+  const MORTA_APOS_MS = 45000; // 3 batimentos perdidos = considera a outra morta
   let substituida = false;
+  let batimentoTimer = null;
+  let decidiu = false; // a decisão "assumo ou espelho" é tomada UMA vez, na carga
+
   function assumirRecepcao() {
     ativaRef.set({ id: minhaId, ts: firebase.database.ServerValue.TIMESTAMP });
+    ativaRef.onDisconnect().remove();
+    if (!batimentoTimer) {
+      batimentoTimer = setInterval(() => {
+        if (!substituida) ativaRef.update({ ts: firebase.database.ServerValue.TIMESTAMP });
+      }, BATIMENTO_MS);
+    }
   }
-  assumirRecepcao();
+  function entrarEmEspelho(val) {
+    substituida = true;
+    substituidaEl.classList.add('ativa');
+    const desde = val && val.ts ? new Date(val.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '?';
+    substituidaTexto.textContent = 'Outra tela está ativa como recepção (último sinal às ' + desde + '). Esta só espelha os chamados; quem fala é a outra. Se ESTA é a TV da recepção, clique aqui pra assumir.';
+    if (audioAtual) audioAtual.pause();
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    if (finalizarFalaAtual) finalizarFalaAtual();
+  }
+  let ultimaAtiva = null;
+  function outraEstaViva(val) {
+    return !!(val && val.id && val.id !== minhaId && (Date.now() - (val.ts || 0)) < MORTA_APOS_MS);
+  }
+  function assumirSeAtivaMorreu() {
+    if (substituida && !outraEstaViva(ultimaAtiva)) {
+      substituida = false;
+      substituidaEl.classList.remove('ativa');
+      assumirRecepcao();
+    }
+  }
+  // a ativa pode morrer sem o banco avisar (cabo puxado): o ts só para de avançar, e
+  // nenhum evento 'value' chega — por isso a espelho reavalia sozinha de tempos em tempos
+  setInterval(assumirSeAtivaMorreu, BATIMENTO_MS);
   ativaRef.on('value', snap => {
     const val = snap.val();
-    substituida = !!(val && val.id && val.id !== minhaId);
-    substituidaEl.classList.toggle('ativa', substituida);
-    if (substituida && audioAtual) audioAtual.pause();
-    if (substituida && window.speechSynthesis) window.speechSynthesis.cancel();
-    if (substituida && finalizarFalaAtual) finalizarFalaAtual();
+    ultimaAtiva = val;
+    const outraViva = outraEstaViva(val);
+    if (!decidiu) {
+      decidiu = true;
+      if (outraViva) entrarEmEspelho(val); else assumirRecepcao();
+      return;
+    }
+    if (!substituida && val && val.id && val.id !== minhaId) {
+      // alguém clicou "assumir" em outra tela — cede
+      entrarEmEspelho(val);
+    } else if (substituida) {
+      // a ativa saiu (ou morreu) — a espelho assume sozinha
+      assumirSeAtivaMorreu();
+    }
   });
-  substituidaEl.onclick = assumirRecepcao;
+  substituidaEl.onclick = () => {
+    substituida = false;
+    substituidaEl.classList.remove('ativa');
+    assumirRecepcao();
+  };
 
   function atualizarBotaoMudo() {
     btnMudo.textContent = mudo ? '🔇 Som desligado — clique pra reativar' : '🔊 Silenciar voz';
@@ -841,6 +889,8 @@ function iniciarRecepcao() {
     callsRef.off();
     callsLegadoRef.off();
     ativaRef.off();
+    clearInterval(batimentoTimer);
+    if (!substituida) { ativaRef.onDisconnect().cancel(); ativaRef.remove(); }
     if (audioAtual) audioAtual.pause();
     if (window.speechSynthesis) window.speechSynthesis.cancel();
     localStorage.removeItem('papel_tela');
