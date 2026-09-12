@@ -534,10 +534,11 @@ function iniciarRecepcao() {
   btnMudo.onclick = () => {
     mudo = !mudo;
     localStorage.setItem('painel_mudo', mudo ? '1' : '0');
-    if (mudo && audioAtual) {
-      audioAtual.pause();
-      // pause() não dispara onended/onerror sozinho — sem chamar isso aqui, a trava
-      // estado/falando ficaria presa até o timeout de 15s toda vez que mutar no meio
+    if (mudo) {
+      if (audioAtual) audioAtual.pause();
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+      // pause()/cancel() não disparam onended/onerror sozinhos — sem chamar isso aqui, a
+      // trava estado/falando ficaria presa até o timeout de 15s toda vez que mutar no meio
       if (finalizarFalaAtual) finalizarFalaAtual();
     }
     atualizarBotaoMudo();
@@ -551,7 +552,7 @@ function iniciarRecepcao() {
   atualizarRelogio();
   setInterval(atualizarRelogio, 30000);
 
-  statusEl.textContent = 'voz: Google Tradutor (áudio via rede)';
+  statusEl.textContent = 'voz: /tts (Google Tradutor via Worker) + reserva do navegador';
 
   setInterval(() => { tentarLiberarAudio(); }, 10000);
 
@@ -600,6 +601,24 @@ function iniciarRecepcao() {
     return `Atenção, ${chamado.nome}. Comparecer ao ${chamado.sala}.`;
   }
 
+  // RESERVA: se o áudio de rede falhar (internet da UBS caiu, Worker fora do ar, Google
+  // bloqueou), tenta a voz do próprio navegador. O Chrome pode segurar essa fala se não
+  // houve clique recente — mas é melhor que silêncio, e o timeout de 15s libera a trava.
+  function falarComNavegador(texto, onend) {
+    if (!('speechSynthesis' in window)) { onend(); return; }
+    try {
+      const u = new SpeechSynthesisUtterance(texto);
+      u.lang = 'pt-BR';
+      u.rate = 0.95;
+      u.onend = onend;
+      u.onerror = onend;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    } catch (e) {
+      onend();
+    }
+  }
+
   const estadoRef = db.ref('estado/falando');
   // limpa o estado ao carregar — se a TV foi recarregada no meio de uma fala, ninguém
   // mais vai limpar aquele "true" preso e os consultórios ficariam travados pra sempre
@@ -639,24 +658,27 @@ function iniciarRecepcao() {
       if (concluido) return;
       if (!ganhou) { finalizar(); return; }
 
-      // ÁUDIO REAL via endpoint público do Google Tradutor, tocado por <audio> — não
-      // é speechSynthesis. O Chrome exige clique RECENTE (poucos segundos) pra liberar
-      // som do speechSynthesis, mesmo com foco/aba visível/áudio de fundo tocando (bug
-      // confirmado em teste real); <audio>.play() segue a política de autoplay mais
+      // ÁUDIO REAL tocado por <audio>, servido pela NOSSA origem em /tts (src/worker.js
+      // busca o MP3 no Google Tradutor do lado do servidor). Não é speechSynthesis: o
+      // Chrome exige clique RECENTE (poucos segundos) pra liberar essa fala, mesmo com
+      // foco/aba visível/áudio de fundo tocando (confirmado em teste real), e por isso o
+      // chamado remoto saía mudo. <audio>.play() segue a política de autoplay mais
       // permissiva (Media Engagement Index), que o áudio de fundo já vinha alimentando.
-      // Limite de ~200 chars por request do endpoint — nossa frase nunca chega perto.
-      const url = 'https://translate.google.com/translate_tts?ie=UTF-8&tl=pt-BR&client=tw-ob&q=' + encodeURIComponent(texto.slice(0, 200));
+      // E não chamar o Google direto daqui: com Referer da nossa página ele responde erro
+      // em vez de MP3, e o <audio> dispara NotSupportedError no play().
+      const url = '/tts?q=' + encodeURIComponent(texto.slice(0, 200));
       const audio = new Audio(url);
       audioAtual = audio;
+      let reservaUsada = false; // onerror e play().catch podem disparar os dois pro mesmo erro
+      function usarReserva(motivo) {
+        if (reservaUsada || concluido) return;
+        reservaUsada = true;
+        diagnosticoEl.textContent = motivo + ' — tentando voz do navegador (' + new Date().toLocaleTimeString('pt-BR') + ')';
+        falarComNavegador(texto, finalizar);
+      }
       audio.onended = finalizar;
-      audio.onerror = () => {
-        diagnosticoEl.textContent = 'ERRO DE ÁUDIO (Google Tradutor TTS) — verifique internet dessa tela (' + new Date().toLocaleTimeString('pt-BR') + ')';
-        finalizar();
-      };
-      audio.play().catch(err => {
-        diagnosticoEl.textContent = 'play() do áudio falhou: ' + (err && err.name ? err.name : err);
-        finalizar();
-      });
+      audio.onerror = () => usarReserva('ERRO no áudio de rede (/tts) — verifique internet dessa tela');
+      audio.play().catch(err => usarReserva('play() do áudio falhou: ' + (err && err.name ? err.name : err)));
     });
   }
 
@@ -712,6 +734,7 @@ function iniciarRecepcao() {
     if (!confirm('Trocar o papel desta tela?')) return;
     callsRef.off();
     if (audioAtual) audioAtual.pause();
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
     localStorage.removeItem('papel_tela');
     mostrarView('picker');
     montarPicker();

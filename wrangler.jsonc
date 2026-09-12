@@ -1,12 +1,14 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "painel-ubs",
+  "main": "src/worker.js",
   "compatibility_date": "2026-09-11",
   "observability": {
     "enabled": true
   },
   "assets": {
-    "directory": "./public"
+    "directory": "./public",
+    "binding": "ASSETS"
   },
   "routes": [
     { "pattern": "painel-ubs.soaperando.com.br", "custom_domain": true }
