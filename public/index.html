@@ -246,8 +246,16 @@
   #bloqueado.ativa { display: flex; }
   #bloqueado h2 { font-size: 26px; margin-bottom: 10px; color: var(--yellow); }
   #bloqueado p { color: var(--text-dim); max-width: 520px; }
-  #status { position: fixed; bottom: 8px; right: 14px; font-size: 11px; color: var(--text-dim); opacity:.6; }
-  #diagnostico { position: fixed; bottom: 26px; right: 14px; font-size: 11px; color: var(--yellow); max-width: 340px; text-align: right; }
+  /* diagnóstico fica escondido; tecla D na TV mostra/esconde. O histórico completo fica
+     em localStorage (painel_log) e no console (painelLog()) */
+  #status { position: fixed; bottom: 8px; right: 14px; font-size: 11px; color: var(--text-dim); opacity:.6; display: none; }
+  #diagnostico { position: fixed; bottom: 26px; right: 14px; font-size: 11px; color: var(--yellow); max-width: 340px; text-align: right; display: none; }
+  body.mostrar-diag #status, body.mostrar-diag #diagnostico { display: block; }
+  .voz-sel { margin-top: 10px; display: flex; justify-content: flex-end; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); }
+  .voz-sel select {
+    background: var(--bg); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 6px 10px; font-family: inherit; font-size: 12px; max-width: 260px;
+  }
   #trocarSalaRecepcao {
     margin-top: 14px;
     margin-left: 8px;
@@ -341,6 +349,7 @@
         <div class="date" id="data"></div>
         <button id="btnMudo" class="mudo-btn">🔊 Silenciar voz</button>
         <button id="trocarSalaRecepcao">🔄 Trocar tela / sala</button>
+        <div class="voz-sel"><label for="selVoz">Voz</label><select id="selVoz"></select></div>
       </div>
     </header>
     <div class="grid">
@@ -388,12 +397,13 @@ const SALAS = [
   "Sala de Medicação"
 ];
 const MAX_HISTORICO = 6;
+const REPETICOES_CHAMADO = 2; // quantas vezes a recepção anuncia cada chamado automático
 
 // SUBIR este número a cada deploy. A primeira tela que carrega a versão nova grava o
 // número em painel/versao, e toda tela aberta com número menor recarrega sozinha
 // (consultório na hora; recepção quando não estiver falando). Sem isso, uma aba
 // esquecida em outro PC roda código velho pra sempre.
-const VERSAO = 7;
+const VERSAO = 8;
 
 // Caminhos no banco. RENOMEADOS de propósito em relação às versões antigas (calls/ e
 // estado/): uma recepção antiga esquecida aberta em outro PC — de qualquer versão, até
@@ -737,20 +747,60 @@ function iniciarRecepcao() {
   atualizarRelogio();
   setInterval(atualizarRelogio, 30000);
 
+  // Voz escolhida no seletor da tela (salva neste PC). Sem escolha, usa VOZ_PREFERIDA
+  // entre as vozes em português; "/tts" força o áudio do Google via Worker.
+  const selVoz = document.getElementById('selVoz');
+  const VOZ_TTS = '/tts';
+  function vozesPt() {
+    if (!window.speechSynthesis) return [];
+    return speechSynthesis.getVoices().filter(v => /^pt([-_]|$)/i.test(v.lang));
+  }
   function escolherVoz() {
-    if (!window.speechSynthesis) return null;
-    const pt = speechSynthesis.getVoices().filter(v => /^pt([-_]|$)/i.test(v.lang));
+    const pt = vozesPt();
+    let salva = null;
+    try { salva = localStorage.getItem('painel_voz'); } catch (e) {}
+    if (salva === VOZ_TTS) return null;
+    if (salva) { const v = pt.find(v => v.name === salva); if (v) return v; }
     if (pt.length === 0) return null;
     return pt.find(v => VOZ_PREFERIDA.test(v.name)) || pt.find(v => /br/i.test(v.lang)) || pt[0];
   }
-  function atualizarStatusVoz() {
-    const voz = escolherVoz();
-    statusEl.textContent = 'voz: ' + (voz ? voz.name + ' (navegador)' : '/tts (Google via Worker)');
+  function montarSeletorVoz() {
+    const pt = vozesPt();
+    const atual = escolherVoz();
+    selVoz.innerHTML = '';
+    pt.forEach(v => {
+      const o = document.createElement('option');
+      o.value = v.name;
+      o.textContent = v.name + ' (' + v.lang + ')';
+      selVoz.appendChild(o);
+    });
+    const oTts = document.createElement('option');
+    oTts.value = VOZ_TTS;
+    oTts.textContent = 'Google (áudio pela internet)';
+    selVoz.appendChild(oTts);
+    selVoz.value = atual ? atual.name : VOZ_TTS;
+    statusEl.textContent = 'voz: ' + (atual ? atual.name + ' (navegador)' : '/tts (Google via Worker)');
   }
-  atualizarStatusVoz();
+  selVoz.onchange = () => {
+    try { localStorage.setItem('painel_voz', selVoz.value); } catch (e) {}
+    montarSeletorVoz();
+    aquecerVoz();
+  };
+  montarSeletorVoz();
   // a lista de vozes chega depois da carga em alguns navegadores
-  if (window.speechSynthesis) speechSynthesis.onvoiceschanged = atualizarStatusVoz;
+  if (window.speechSynthesis) speechSynthesis.onvoiceschanged = montarSeletorVoz;
   let utteranceAtual = null; // o Chrome perde onend/onerror se o objeto for coletado no meio
+
+  // a 1ª fala do dia demora pra começar (carrega o motor da voz). Fala uma sílaba em
+  // volume zero pra deixar pronto — assim o chamado real não estoura a guarda de tempo.
+  function aquecerVoz() {
+    const voz = escolherVoz();
+    if (!voz) return;
+    const u = new SpeechSynthesisUtterance('a');
+    u.voice = voz; u.lang = voz.lang; u.volume = 0;
+    utteranceAtual = u;
+    speechSynthesis.speak(u);
+  }
 
   // fala com a voz do navegador; aoFalhar(motivo) se não der (negado por falta de clique,
   // sem voz em português, ou travou sem começar em 2s) — aí o chamador usa o /tts
@@ -767,8 +817,8 @@ function iniciarRecepcao() {
       if (comecou || falhou) return;
       falhou = true;
       speechSynthesis.cancel();
-      aoFalhar('voz do navegador não começou em 2s');
-    }, 2000);
+      aoFalhar('voz do navegador não começou em 5s');
+    }, 5000);
     u.onstart = () => { comecou = true; clearTimeout(guarda); diag('falando com ' + voz.name); };
     u.onend = () => { if (comecou && !falhou) aoTerminar(); };
     u.onerror = e => {
@@ -799,7 +849,7 @@ function iniciarRecepcao() {
       osc.connect(gain).connect(audioCtx.destination);
       osc.start();
     } catch (e) {
-      diagnosticoEl.textContent = 'audioctx falhou: ' + e.message;
+      diag('audioctx falhou: ' + e.message);
     }
   }
 
@@ -810,18 +860,34 @@ function iniciarRecepcao() {
     if (audioEl) {
       audioEl.play().then(() => {
         // o navegador deixou tocar sem clique (Chrome libera pra sites que tocam som com
-        // frequência) — então não precisa de ninguém clicando no overlay depois de um F5
-        if (!somLiberado) { comoLiberou = 'sozinho (sem clique)'; liberarSom(); }
+        // frequência). Mas a voz do navegador tem regra própria (precisa de 1 clique na
+        // página desde a carga) — só esconde o overlay sozinho se ela também passar.
+        if (!somLiberado && !testandoVoz) testarVozDoNavegador();
       }).catch(err => {
-        diagnosticoEl.textContent = 'áudio de fundo bloqueado: ' + (err && err.name ? err.name : err);
+        diag('áudio de fundo bloqueado: ' + (err && err.name ? err.name : err));
       });
     }
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
   }
 
-  // chamado no clique do overlay OU sozinho, se o navegador já libera áudio sem gesto
+  let testandoVoz = false;
+  function testarVozDoNavegador() {
+    const voz = escolherVoz();
+    if (!voz) { comoLiberou = 'sozinho (sem clique, só /tts)'; liberarSom(); return; }
+    testandoVoz = true;
+    const u = new SpeechSynthesisUtterance('a');
+    u.voice = voz; u.lang = voz.lang; u.volume = 0;
+    const fim = setTimeout(() => { testandoVoz = false; }, 6000);
+    u.onend = () => { clearTimeout(fim); testandoVoz = false; if (!somLiberado) { comoLiberou = 'sozinho (sem clique)'; liberarSom(); } };
+    u.onerror = e => { clearTimeout(fim); testandoVoz = false; diag('voz do navegador sem clique: ' + e.error + ' — overlay fica'); };
+    utteranceAtual = u;
+    speechSynthesis.speak(u);
+  }
+
+  // chamado no clique do overlay OU sozinho, se o navegador já libera áudio e voz sem gesto
   function liberarSom() {
     somLiberado = true;
+    aquecerVoz();
     // toca um áudio SILENCIOSO em loop desde já e deixa rodando o dia inteiro —
     // estabelece a aba como "produzindo áudio" pro Chrome, o que a política de autoplay
     // de <audio> aceita mesmo sem gesto recente (diferente do speechSynthesis, que expira
@@ -849,15 +915,34 @@ function iniciarRecepcao() {
 
   // cada etapa da fala vira um trecho na linha de diagnóstico (em vez de sobrescrever),
   // pra dar pra ver na TV onde exatamente uma chamada parou
+  const LOG_MAX = 300;
+  let log = [];
+  try { log = JSON.parse(localStorage.getItem('painel_log') || '[]'); } catch (e) { log = []; }
+  function gravarLog(linha) {
+    log.push(linha);
+    if (log.length > LOG_MAX) log = log.slice(-LOG_MAX);
+    try { localStorage.setItem('painel_log', JSON.stringify(log)); } catch (e) {}
+    console.log('[painel] ' + linha);
+  }
+  // no console da TV: painelLog() lista tudo; painelLog(true) limpa
+  window.painelLog = limpar => {
+    if (limpar) { log = []; try { localStorage.removeItem('painel_log'); } catch (e) {} return 'limpo'; }
+    return log.join('\n');
+  };
   function diag(msg) {
     diagnosticoEl.textContent += ' | ' + msg;
+    gravarLog(new Date().toLocaleTimeString('pt-BR') + ' ' + msg);
   }
+  document.addEventListener('keydown', e => {
+    if (e.key === 'd' || e.key === 'D') document.body.classList.toggle('mostrar-diag');
+  });
 
   function falar(texto, onend) {
     if (mudo) { onend(); return; } // silenciado: não fala e não trava nenhuma sala
     if (substituida) { onend(); return; } // outra recepção assumiu: só espelha a tela
     const audioElDiag = document.getElementById('keepAliveAudio');
-    diagnosticoEl.textContent = `[${new Date().toLocaleTimeString('pt-BR')}] falando "${texto.slice(0,30)}..." — foco=${document.hasFocus()} vis=${document.visibilityState} audioPausado=${audioElDiag ? audioElDiag.paused : 'sem-elemento'} audioCtx=${audioCtx ? audioCtx.state : 'nulo'}`;
+    diagnosticoEl.textContent = `[${new Date().toLocaleTimeString('pt-BR')}]`;
+    diag(`falando "${texto.slice(0,30)}..." — foco=${document.hasFocus()} vis=${document.visibilityState} audioPausado=${audioElDiag ? audioElDiag.paused : 'sem-elemento'} audioCtx=${audioCtx ? audioCtx.state : 'nulo'}`);
     let concluido = false;
     function finalizar() {
       if (concluido) return;
@@ -929,10 +1014,17 @@ function iniciarRecepcao() {
     historico = historico.slice(0, MAX_HISTORICO);
     renderHistorico();
 
-    // fala apenas 1x automaticamente — repetição só por clique manual (botão "Repetir")
-    falar(textoChamado(chamado), () => {
+    anunciar(chamado, REPETICOES_CHAMADO, () => {
       processando = false;
       processarFila();
+    });
+  }
+
+  // fala o chamado N vezes, com uma pausa curta entre elas
+  function anunciar(chamado, vezes, aoTerminar) {
+    falar(textoChamado(chamado), () => {
+      if (vezes > 1 && !mudo) setTimeout(() => anunciar(chamado, vezes - 1, aoTerminar), 900);
+      else aoTerminar();
     });
   }
 
@@ -965,7 +1057,7 @@ function iniciarRecepcao() {
   btnRepetir.onclick = () => {
     if (!ultimoChamado || processando) return;
     processando = true;
-    falar(textoChamado(ultimoChamado), () => { processando = false; processarFila(); });
+    anunciar(ultimoChamado, 1, () => { processando = false; processarFila(); });
   };
 
   document.getElementById('trocarSalaRecepcao').onclick = () => {
