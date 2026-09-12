@@ -27,7 +27,9 @@ function erro(status, msg) {
 async function tts(url, env, ctx) {
   const texto = (url.searchParams.get('q') || '').trim().slice(0, TTS_MAX_CHARS);
   if (!texto) return erro(400, 'faltou q');
-  if (!env.GOOGLE_TTS_KEY) return erro(503, 'GOOGLE_TTS_KEY não configurada (npx wrangler secret put GOOGLE_TTS_KEY)');
+  // trim: colar a chave no terminal costuma trazer quebra de linha/espaço no fim
+  const chaveApi = (env.GOOGLE_TTS_KEY || '').trim();
+  if (!chaveApi) return erro(503, 'GOOGLE_TTS_KEY não configurada (npx wrangler secret put GOOGLE_TTS_KEY)');
 
   const cache = caches.default;
   const chave = new Request('https://tts.painel-ubs.local/' + TTS_VOZ + '/' + encodeURIComponent(texto));
@@ -36,7 +38,7 @@ async function tts(url, env, ctx) {
 
   let res;
   try {
-    res = await fetch(TTS_API + '?key=' + encodeURIComponent(env.GOOGLE_TTS_KEY), {
+    res = await fetch(TTS_API + '?key=' + encodeURIComponent(chaveApi), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -50,8 +52,8 @@ async function tts(url, env, ctx) {
   }
   if (!res.ok) {
     const corpo = await res.text();
-    // 429 = cota do mês estourada; 403 = chave inválida/API desativada/faturamento off
-    return erro(502, 'Google TTS ' + res.status + ': ' + corpo.slice(0, 300));
+    // 429 = cota do mês estourada; 403 = API desativada/faturamento off; 400 = chave inválida
+    return erro(502, 'Google TTS ' + res.status + ' (chave com ' + chaveApi.length + ' caracteres, começa com ' + chaveApi.slice(0, 4) + '): ' + corpo.slice(0, 300));
   }
   const json = await res.json();
   if (!json.audioContent) return erro(502, 'Google TTS sem audioContent');
