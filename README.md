@@ -10,6 +10,7 @@ Site: `https://painel-ubs.soaperando.com.br`
 | TV da recepção | `/recepcao` |
 | Consultórios | `/01` `/02` `/03` `/04` |
 | Outras salas | `/odontologia` `/nutricao` `/enfermagem` `/triagem` `/vacina` `/medicacao` |
+| Monitor (só leitura, para acompanhar de fora sem mexer na TV) | `/monitor` |
 
 Abrir o endereço da sala já entra nela sem clicar. F5 mantém a sala; uma aba nova cai na escolha.
 
