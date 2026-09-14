@@ -435,7 +435,7 @@
           <div class="sub3" id="monLimpezaSub">Automática todo dia às 18h; manual pelo botão "Limpar chamados".</div>
         </div>
         <div class="mon-card">
-          <div class="t">SALAS COM A TELA ABERTA</div>
+          <div class="t">SALAS (TELA ABERTA OU ÚLTIMA VEZ)</div>
           <ul class="mon-lista" id="monSalas"><li>…</li></ul>
         </div>
       </div>
@@ -515,7 +515,11 @@ const DB = {
   recepcaoAtiva: 'painel/recepcao_ativa',
   salasAtivas: 'painel/salas_ativas',  // uma entrada por sala, mesma trava da recepção
   versao: 'painel/versao',
-  limpeza: 'painel/limpeza'  // { ts, tipo: 'automatica'|'manual', origem } da última limpeza
+  limpeza: 'painel/limpeza',  // { ts, tipo: 'automatica'|'manual', origem } da última limpeza
+  // último batimento de cada papel, que NÃO é apagado ao desconectar (o registro da trava
+  // some junto com a tela). É o que permite ao /monitor dizer "TV inativa desde 17:32"
+  tvUltimoSinal: 'painel/tv_ultimo_sinal',
+  salasUltimoSinal: 'painel/salas_ultimo_sinal'
 };
 
 // Voz da recepção: PRINCIPAL é a Google Cloud TTS (masculina "Orus", Chirp 3 HD), gerada
@@ -627,12 +631,16 @@ function idDestaAba() {
 }
 
 // aoMudar(ativa, registroDaOutra) é chamado ao assumir e ao ser bloqueada
-function travaDePapel(ref, aoMudar) {
+function travaDePapel(ref, aoMudar, refUltimoSinal) {
   const meuId = idDestaAba();
   let ativa = false;
   let decidiu = false; // "assumo ou bloqueio" é decidido UMA vez, na carga
   let batimento = null;
-  function gravar() { ref.set({ id: meuId, ts: firebase.database.ServerValue.TIMESTAMP }); }
+  function gravar() {
+    ref.set({ id: meuId, ts: firebase.database.ServerValue.TIMESTAMP });
+    // fica no banco depois que a tela some (só informativo; se a regra faltar, ignora)
+    if (refUltimoSinal) refUltimoSinal.set(firebase.database.ServerValue.TIMESTAMP).catch(() => {});
+  }
   function assumir() {
     ativa = true;
     gravar();
@@ -791,7 +799,7 @@ function iniciarCaller(sala) {
       esconderBloqueio();
       inputEl.focus();
     }
-  });
+  }, db.ref(DB.salasUltimoSinal + '/' + sala));
 
   // recarrega em vez de trocar de view: iniciarCaller() registra listeners e atalhos
   // (Enter, "falando") que continuariam vivos e agindo pela sala antiga
@@ -926,7 +934,7 @@ function iniciarRecepcao() {
     } else {
       esconderBloqueio();
     }
-  });
+  }, db.ref(DB.tvUltimoSinal));
   function sairDaRecepcao() {
     if (audioAtual) audioAtual.pause();
     if (window.speechSynthesis) speechSynthesis.cancel();
@@ -1289,22 +1297,40 @@ function iniciarMonitor() {
   function segundosAtras(ts) { return Math.max(0, Math.round((agoraServidor() - ts) / 1000)); }
   function horaCompleta(ts) { return ts ? new Date(ts).toLocaleTimeString('pt-BR') : '?'; }
 
-  // TV: existe registro em recepcao_ativa com batimento recente (a cada 15s; morta após 45s)
+  function dataHora(ts) {
+    const d = new Date(ts);
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
+  // TV: existe registro em recepcao_ativa com batimento recente (a cada 15s; morta após 45s).
+  // Quando não existe, tv_ultimo_sinal diz desde quando ela sumiu.
   let tv = null;
+  let tvUltimo = null;
   function renderTv() {
-    if (!tv || !tv.ts) {
-      tvEl.textContent = 'Nenhuma TV ativa';
-      tvEl.className = 'v mon-bad';
-      tvSubEl.textContent = 'Nenhuma tela está aberta como recepção agora.';
+    const ts = (tv && tv.ts) || 0;
+    const seg = ts ? segundosAtras(ts) : Infinity;
+    const viva = seg < MORTA_APOS_MS / 1000;
+    if (viva) {
+      tvEl.textContent = 'TV ativa';
+      tvEl.className = 'v mon-ok';
+      tvSubEl.textContent = 'Último sinal há ' + seg + 's (' + horaCompleta(ts) + '). A TV avisa a cada 15s.';
       return;
     }
-    const seg = segundosAtras(tv.ts);
-    const viva = seg < MORTA_APOS_MS / 1000;
-    tvEl.textContent = viva ? 'TV ativa' : 'TV sem sinal';
-    tvEl.className = 'v ' + (viva ? 'mon-ok' : 'mon-bad');
-    tvSubEl.textContent = 'Último sinal há ' + seg + 's (' + horaCompleta(tv.ts) + '). A TV avisa a cada 15s.';
+    const ultimo = Math.max(ts, tvUltimo || 0);
+    tvEl.textContent = 'TV inativa';
+    tvEl.className = 'v mon-bad';
+    tvSubEl.textContent = ultimo
+      ? 'Última vez ativa: ' + dataHora(ultimo) + ' (há ' + duracao(agoraServidor() - ultimo) + ').'
+      : 'Nenhuma tela foi aberta como recepção até agora.';
+  }
+  function duracao(ms) {
+    const min = Math.round(ms / 60000);
+    if (min < 1) return 'menos de 1 min';
+    if (min < 60) return min + ' min';
+    const h = Math.floor(min / 60);
+    return h + 'h' + String(min % 60).padStart(2, '0');
   }
   db.ref(DB.recepcaoAtiva).on('value', snap => { tv = snap.val(); renderTv(); });
+  db.ref(DB.tvUltimoSinal).on('value', snap => { tvUltimo = snap.val(); renderTv(); });
   setInterval(renderTv, 1000);
 
   db.ref(DB.falando).on('value', snap => {
@@ -1324,15 +1350,18 @@ function iniciarMonitor() {
   });
 
   let salas = {};
+  let salasUltimo = {};
   function renderSalas() {
-    const abertas = Object.keys(salas)
-      .filter(nome => salas[nome] && salas[nome].ts && segundosAtras(salas[nome].ts) < MORTA_APOS_MS / 1000)
-      .sort();
-    salasEl.innerHTML = abertas.length
-      ? abertas.map(nome => `<li><span>${escapeHtml(nome)}</span><span class="d">sinal há ${segundosAtras(salas[nome].ts)}s</span></li>`).join('')
-      : '<li><span class="d">Nenhuma sala com a tela aberta.</span></li>';
+    salasEl.innerHTML = SALAS.map(nome => {
+      const ts = (salas[nome] && salas[nome].ts) || 0;
+      const aberta = ts && segundosAtras(ts) < MORTA_APOS_MS / 1000;
+      if (aberta) return `<li><span class="mon-ok">${escapeHtml(nome)}</span><span class="d">aberta · sinal há ${segundosAtras(ts)}s</span></li>`;
+      const ultimo = Math.max(ts, salasUltimo[nome] || 0);
+      return `<li><span class="d">${escapeHtml(nome)}</span><span class="d">${ultimo ? 'fechada · última vez ' + dataHora(ultimo) : 'nunca aberta'}</span></li>`;
+    }).join('');
   }
   db.ref(DB.salasAtivas).on('value', snap => { salas = snap.val() || {}; renderSalas(); });
+  db.ref(DB.salasUltimoSinal).on('value', snap => { salasUltimo = snap.val() || {}; renderSalas(); });
   setInterval(renderSalas, 5000);
 
   let chamados = []; // mais recente primeiro
