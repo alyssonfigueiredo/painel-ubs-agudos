@@ -329,7 +329,7 @@
   <div class="card">
     <div class="sub">PAINEL DE CHAMADA</div>
     <h1 id="salaAtual"></h1>
-    <input type="text" id="nomePaciente" placeholder="Nome do paciente" autocomplete="off">
+    <input type="text" id="nomePaciente" placeholder="Nome do paciente" autocomplete="off" maxlength="80">
     <button class="primary" id="btnChamar">Chamar</button>
     <div class="feedback" id="feedback"></div>
     <div class="hist-sala" id="historicoSala"></div>
@@ -595,7 +595,10 @@ function travaDePapel(ref, aoMudar) {
     parar() {
       ref.off('value', escuta);
       clearInterval(batimento);
-      if (ativa) { ref.onDisconnect().cancel(); ref.remove(); }
+      // o onDisconnect().remove() fica registrado de propósito: se a página navegar
+      // antes deste remove() chegar, o Firebase apaga ao ver a desconexão. Sem isso,
+      // o registro ficava "vivo" por até 45s e bloqueava a próxima tela
+      if (ativa) ref.remove();
       ativa = false;
     }
   };
@@ -848,7 +851,6 @@ function iniciarRecepcao() {
     if (window.speechSynthesis) speechSynthesis.cancel();
     if (finalizarFalaAtual) finalizarFalaAtual();
     trava.parar();
-    if (ativaFalando) estadoRef.onDisconnect().cancel();
     guardarPapel(null);
     location.replace('/'); // sai do /01, /recepcao... senão voltaria pro mesmo papel
   }
