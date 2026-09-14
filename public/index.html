@@ -272,6 +272,21 @@
   }
   .operador button:hover { border-color: var(--coral); color: var(--text); }
 
+  /* ---------- monitor (só leitura, pra acompanhar de fora) ---------- */
+  .mon-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 800px) { .mon-grid { grid-template-columns: 1fr; } }
+  .mon-card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 22px 24px; margin-bottom: 20px; }
+  .mon-card .t { color: var(--text-dim); font-size: 13px; font-weight: 700; letter-spacing: 0.1em; margin-bottom: 10px; }
+  .mon-card .v { font-size: 22px; font-weight: 700; line-height: 1.3; }
+  .mon-card .sub3 { color: var(--text-dim); font-size: 14px; margin-top: 4px; }
+  .mon-ok { color: #7fd8a6; }
+  .mon-bad { color: #ff8a80; }
+  .mon-lista { list-style: none; margin: 0; padding: 0; }
+  .mon-lista li { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 16px; }
+  .mon-lista li:last-child { border-bottom: none; }
+  .mon-lista .d { color: var(--text-dim); font-size: 14px; white-space: nowrap; }
+  .mon-nota { color: var(--text-dim); font-size: 13px; margin-top: 10px; }
+
   .mudo-btn.mudo-ativo {
     background: #7a1f1f;
     border-color: #ff6b6b;
@@ -386,6 +401,55 @@
   <div id="diagnostico"></div>
 </div>
 
+<!-- ============ MONITOR (só leitura: acompanhar a TV de fora, sem interferir) ============ -->
+<div id="view-monitor" class="view">
+  <div class="page">
+    <header>
+      <div class="brand">
+        <div class="brasao"><img src="/img/brasao.png" alt="Brasão de Agudos do Sul" onerror="this.parentNode.remove()"></div>
+        <div>
+          <h1>UBS Francisca de Oliveira Silva</h1>
+          <div class="sub2">MONITOR · SÓ LEITURA, NÃO INTERFERE NA TV</div>
+        </div>
+      </div>
+      <div class="clock">
+        <div class="time js-hora">--:--</div>
+        <div class="date js-data"></div>
+      </div>
+    </header>
+    <div class="mon-grid">
+      <div>
+        <div class="mon-card">
+          <div class="t">TV DA RECEPÇÃO</div>
+          <div class="v" id="monTv">…</div>
+          <div class="sub3" id="monTvSub"></div>
+        </div>
+        <div class="mon-card">
+          <div class="t">FALANDO AGORA</div>
+          <div class="v" id="monFalando">…</div>
+          <div class="sub3">"Sim" só enquanto a TV está anunciando um nome (alguns segundos).</div>
+        </div>
+        <div class="mon-card">
+          <div class="t">SALAS COM A TELA ABERTA</div>
+          <ul class="mon-lista" id="monSalas"><li>…</li></ul>
+        </div>
+      </div>
+      <div>
+        <div class="mon-card">
+          <div class="t">ÚLTIMO CHAMADO</div>
+          <div class="v" id="monAtual">—</div>
+          <div class="sub3" id="monAtualSub"></div>
+        </div>
+        <div class="mon-card">
+          <div class="t">CHAMADOS DE HOJE (MAIS RECENTES)</div>
+          <ul class="mon-lista" id="monHistorico"><li>Nenhum chamado ainda.</li></ul>
+          <div class="mon-nota">Não dá pra saber daqui se o som saiu na TV; dá pra ver que o chamado chegou e que a TV o anunciou (Falando agora).</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- gerado pelo `npm run deploy` (scripts/deploy.mjs); não existe no git -->
 <script src="/versao.js"></script>
 <script>
@@ -462,7 +526,8 @@ const db = firebase.database();
 const views = {
   picker: document.getElementById('view-picker'),
   caller: document.getElementById('view-caller'),
-  recepcao: document.getElementById('view-recepcao')
+  recepcao: document.getElementById('view-recepcao'),
+  monitor: document.getElementById('view-monitor')
 };
 
 function mostrarView(nome) {
@@ -493,6 +558,7 @@ function papelDaUrl() {
   if (!q) return null;
   const alvo = slug(q);
   if (alvo === 'recepcao') return 'recepcao';
+  if (alvo === 'monitor') return 'monitor';
   if (ATALHO_URL[alvo]) return ATALHO_URL[alvo];
   return SALAS.find(sala => slug(sala) === alvo) || null;
 }
@@ -506,8 +572,11 @@ function init() {
   } catch (e) {}
   const daUrl = papelDaUrl();
   const papel = daUrl || papelSalvo(); // 'recepcao' ou nome de uma sala
-  if (daUrl) guardarPapel(daUrl);
-  if (papel === 'recepcao') {
+  if (daUrl && daUrl !== 'monitor') guardarPapel(daUrl);
+  if (papel === 'monitor') {
+    mostrarView('monitor');
+    iniciarMonitor();
+  } else if (papel === 'recepcao') {
     mostrarView('recepcao');
     iniciarRecepcao();
   } else if (papel && SALAS.includes(papel)) {
@@ -1190,6 +1259,90 @@ function iniciarRecepcao() {
     if (!confirm('Trocar o papel desta tela?')) return;
     sairDaRecepcao();
   };
+}
+
+// ---------------- monitor: só leitura ----------------
+// /monitor — pra conferir de fora se a TV está de pé, sem abrir uma recepção (que viraria
+// espelho e cobriria a tela com o aviso). Só escuta o banco; não grava, não fala, não trava.
+function iniciarMonitor() {
+  const tvEl = document.getElementById('monTv');
+  const tvSubEl = document.getElementById('monTvSub');
+  const falandoEl = document.getElementById('monFalando');
+  const salasEl = document.getElementById('monSalas');
+  const atualEl = document.getElementById('monAtual');
+  const atualSubEl = document.getElementById('monAtualSub');
+  const histEl = document.getElementById('monHistorico');
+  const MAX_MON = 12;
+
+  function segundosAtras(ts) { return Math.max(0, Math.round((agoraServidor() - ts) / 1000)); }
+  function horaCompleta(ts) { return ts ? new Date(ts).toLocaleTimeString('pt-BR') : '?'; }
+
+  // TV: existe registro em recepcao_ativa com batimento recente (a cada 15s; morta após 45s)
+  let tv = null;
+  function renderTv() {
+    if (!tv || !tv.ts) {
+      tvEl.textContent = 'Nenhuma TV ativa';
+      tvEl.className = 'v mon-bad';
+      tvSubEl.textContent = 'Nenhuma tela está aberta como recepção agora.';
+      return;
+    }
+    const seg = segundosAtras(tv.ts);
+    const viva = seg < MORTA_APOS_MS / 1000;
+    tvEl.textContent = viva ? 'TV ativa' : 'TV sem sinal';
+    tvEl.className = 'v ' + (viva ? 'mon-ok' : 'mon-bad');
+    tvSubEl.textContent = 'Último sinal há ' + seg + 's (' + horaCompleta(tv.ts) + '). A TV avisa a cada 15s.';
+  }
+  db.ref(DB.recepcaoAtiva).on('value', snap => { tv = snap.val(); renderTv(); });
+  setInterval(renderTv, 1000);
+
+  db.ref(DB.falando).on('value', snap => {
+    const f = !!snap.val();
+    falandoEl.textContent = f ? 'Sim, anunciando' : 'Não';
+    falandoEl.className = 'v ' + (f ? 'mon-ok' : '');
+  });
+
+  let salas = {};
+  function renderSalas() {
+    const abertas = Object.keys(salas)
+      .filter(nome => salas[nome] && salas[nome].ts && segundosAtras(salas[nome].ts) < MORTA_APOS_MS / 1000)
+      .sort();
+    salasEl.innerHTML = abertas.length
+      ? abertas.map(nome => `<li><span>${escapeHtml(nome)}</span><span class="d">sinal há ${segundosAtras(salas[nome].ts)}s</span></li>`).join('')
+      : '<li><span class="d">Nenhuma sala com a tela aberta.</span></li>';
+  }
+  db.ref(DB.salasAtivas).on('value', snap => { salas = snap.val() || {}; renderSalas(); });
+  setInterval(renderSalas, 5000);
+
+  let chamados = []; // mais recente primeiro
+  function renderChamados() {
+    if (chamados.length === 0) {
+      atualEl.textContent = '—';
+      atualSubEl.textContent = '';
+      histEl.innerHTML = '<li><span class="d">Nenhum chamado ainda.</span></li>';
+      return;
+    }
+    const c = chamados[0];
+    atualEl.textContent = c.nome;
+    atualSubEl.textContent = c.sala + ' · ' + horaCompleta(c.ts);
+    histEl.innerHTML = chamados.map(h =>
+      `<li><span>${escapeHtml(h.nome)} <span class="d">· ${escapeHtml(h.sala)}</span></span><span class="d">${horaCompleta(h.ts)}</span></li>`
+    ).join('');
+  }
+  const ref = db.ref(DB.chamadas).orderByChild('ts').limitToLast(MAX_MON);
+  ref.on('child_added', snap => {
+    const val = snap.val();
+    if (!val || !val.nome) return;
+    chamados.unshift({ key: snap.key, ...val });
+    chamados.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    chamados = chamados.slice(0, MAX_MON);
+    renderChamados();
+  });
+  ref.on('child_removed', snap => {
+    chamados = chamados.filter(h => h.key !== snap.key);
+    renderChamados();
+  });
+
+  vigiarVersao(() => true);
 }
 
 iniciarQuandoSouberAHora();
