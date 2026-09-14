@@ -18,12 +18,16 @@ const TTS_CACHE_SECONDS = 60 * 60 * 24 * 30;
 // a lista sozinhas. Teste manual: npx wrangler dev --test-scheduled e abrir
 // http://localhost:8787/__scheduled
 const DB_CHAMADAS = 'https://painel-ubs-c7992-default-rtdb.firebaseio.com/chamadas.json';
+const DB_LIMPEZA = 'https://painel-ubs-c7992-default-rtdb.firebaseio.com/painel/limpeza.json';
 
 export default {
   async scheduled(event, env, ctx) {
     const res = await fetch(DB_CHAMADAS, { method: 'DELETE' });
     if (!res.ok) throw new Error('limpeza de chamadas falhou: ' + res.status + ' ' + (await res.text()).slice(0, 200));
     console.log('limpeza diária: chamadas/ apagado');
+    // registro informativo (aparece no /monitor); se a regra não existir, só loga
+    const reg = await fetch(DB_LIMPEZA, { method: 'PUT', body: JSON.stringify({ ts: Date.now(), tipo: 'automatica', origem: 'worker' }) });
+    if (!reg.ok) console.warn('não gravou painel/limpeza: ' + reg.status);
   },
 
   async fetch(request, env, ctx) {

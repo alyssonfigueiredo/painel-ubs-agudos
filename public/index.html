@@ -430,6 +430,11 @@
           <div class="sub3">"Sim" só enquanto a TV está anunciando um nome (alguns segundos).</div>
         </div>
         <div class="mon-card">
+          <div class="t">ÚLTIMA LIMPEZA DOS CHAMADOS</div>
+          <div class="v" id="monLimpeza">…</div>
+          <div class="sub3" id="monLimpezaSub">Automática todo dia às 18h; manual pelo botão "Limpar chamados".</div>
+        </div>
+        <div class="mon-card">
           <div class="t">SALAS COM A TELA ABERTA</div>
           <ul class="mon-lista" id="monSalas"><li>…</li></ul>
         </div>
@@ -509,7 +514,8 @@ const DB = {
   falando: 'painel/falando',
   recepcaoAtiva: 'painel/recepcao_ativa',
   salasAtivas: 'painel/salas_ativas',  // uma entrada por sala, mesma trava da recepção
-  versao: 'painel/versao'
+  versao: 'painel/versao',
+  limpeza: 'painel/limpeza'  // { ts, tipo: 'automatica'|'manual', origem } da última limpeza
 };
 
 // Voz da recepção: PRINCIPAL é a Google Cloud TTS (masculina "Orus", Chirp 3 HD), gerada
@@ -727,7 +733,13 @@ setInterval(atualizarRelogio, 30000);
 // mesmo que a limpeza automática das 18h. Toda tela aberta some com os nomes na hora.
 function limparChamados() {
   if (!confirm('Apagar todos os chamados de hoje em todas as telas?')) return;
-  db.ref(DB.chamadas).remove().catch(err => alert('Não consegui limpar: ' + err.message));
+  db.ref(DB.chamadas).remove()
+    .then(() => db.ref(DB.limpeza).set({
+      ts: firebase.database.ServerValue.TIMESTAMP,
+      tipo: 'manual',
+      origem: papelSalvo() || 'desconhecida'
+    }).catch(() => {})) // registro é só informativo (aparece no /monitor); regra pode não existir ainda
+    .catch(err => alert('Não consegui limpar: ' + err.message));
 }
 
 function escapeHtml(s) {
@@ -1299,6 +1311,16 @@ function iniciarMonitor() {
     const f = !!snap.val();
     falandoEl.textContent = f ? 'Sim, anunciando' : 'Não';
     falandoEl.className = 'v ' + (f ? 'mon-ok' : '');
+  });
+
+  const limpezaEl = document.getElementById('monLimpeza');
+  db.ref(DB.limpeza).on('value', snap => {
+    const l = snap.val();
+    if (!l || !l.ts) { limpezaEl.textContent = 'Sem registro'; return; }
+    const d = new Date(l.ts);
+    const quando = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const tipo = l.tipo === 'automatica' ? 'automática (18h)' : 'manual' + (l.origem ? ' pela tela ' + l.origem : '');
+    limpezaEl.textContent = quando + ' · ' + tipo;
   });
 
   let salas = {};
