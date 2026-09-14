@@ -11,9 +11,10 @@
     "binding": "ASSETS",
     // /recepcao, /01, /vacina... não são arquivos: serve o index.html e o JS lê o caminho
     "not_found_handling": "single-page-application",
-    // por padrão um arquivo existente é servido sem passar pelo Worker; o versao.js
-    // precisa passar pra sair com Cache-Control: no-store (ver src/worker.js)
-    "run_worker_first": ["/versao.js"]
+    // TUDO passa pelo Worker (src/worker.js): /tts vira MP3, /versao.js sai com
+    // no-store e o resto vai pros assets. Com a lista parcial, o /tts chegou a receber
+    // o index.html no lugar do áudio (NotSupportedError na TV).
+    "run_worker_first": true
   },
   // limpeza diária dos chamados às 18h de Brasília (UTC-3, sem horário de verão) = 21:00 UTC
   "triggers": { "crons": ["0 21 * * *"] },

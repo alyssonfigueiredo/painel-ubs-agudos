@@ -155,6 +155,8 @@
     font-family: inherit;
   }
   .trocar-btn:active { background: var(--card); }
+  .rodape-sala { display: flex; gap: 10px; }
+  .rodape-sala .trocar-btn { width: auto; flex: 1; }
   .hist-sala { margin-top: 20px; }
   .hist-sala .hist-titulo { color: var(--text-dim); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; margin-bottom: 8px; }
   .hist-sala-item {
@@ -327,11 +329,14 @@
   <div class="card">
     <div class="sub">PAINEL DE CHAMADA</div>
     <h1 id="salaAtual"></h1>
-    <input type="text" id="nomePaciente" placeholder="Nome do paciente" autocomplete="off">
+    <input type="text" id="nomePaciente" placeholder="Nome do paciente" autocomplete="off" maxlength="80">
     <button class="primary" id="btnChamar">Chamar</button>
     <div class="feedback" id="feedback"></div>
     <div class="hist-sala" id="historicoSala"></div>
-    <button class="trocar-btn" id="trocarSalaCaller">🔄 Trocar sala</button>
+    <div class="rodape-sala">
+      <button class="trocar-btn" id="limparCaller">🧹 Limpar chamados</button>
+      <button class="trocar-btn" id="trocarSalaCaller">🔄 Trocar sala</button>
+    </div>
   </div>
 </div>
 
@@ -373,6 +378,7 @@
     </div>
     <div class="operador">
       <button id="btnMudo" class="mudo-btn">🔊 Silenciar voz</button>
+      <button id="limparRecepcao">🧹 Limpar chamados</button>
       <button id="trocarSalaRecepcao">🔄 Trocar tela / sala</button>
     </div>
   </div>
@@ -589,7 +595,10 @@ function travaDePapel(ref, aoMudar) {
     parar() {
       ref.off('value', escuta);
       clearInterval(batimento);
-      if (ativa) { ref.onDisconnect().cancel(); ref.remove(); }
+      // o onDisconnect().remove() fica registrado de propósito: se a página navegar
+      // antes deste remove() chegar, o Firebase apaga ao ver a desconexão. Sem isso,
+      // o registro ficava "vivo" por até 45s e bloqueava a próxima tela
+      if (ativa) ref.remove();
       ativa = false;
     }
   };
@@ -644,6 +653,13 @@ function atualizarRelogio() {
 }
 atualizarRelogio();
 setInterval(atualizarRelogio, 30000);
+
+// botão "Limpar chamados" (TV e consultórios): apaga TODOS os chamados do banco, o
+// mesmo que a limpeza automática das 18h. Toda tela aberta some com os nomes na hora.
+function limparChamados() {
+  if (!confirm('Apagar todos os chamados de hoje em todas as telas?')) return;
+  db.ref(DB.chamadas).remove().catch(err => alert('Não consegui limpar: ' + err.message));
+}
 
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
@@ -703,6 +719,7 @@ function iniciarCaller(sala) {
     guardarPapel(null);
     location.replace('/'); // sai do /01, /recepcao... senão voltaria pro mesmo papel
   }
+  document.getElementById('limparCaller').onclick = limparChamados;
   document.getElementById('trocarSalaCaller').onclick = () => {
     if (!confirm('Trocar a sala desta tela?')) return;
     sairDaSala();
@@ -834,7 +851,6 @@ function iniciarRecepcao() {
     if (window.speechSynthesis) speechSynthesis.cancel();
     if (finalizarFalaAtual) finalizarFalaAtual();
     trava.parar();
-    if (ativaFalando) estadoRef.onDisconnect().cancel();
     guardarPapel(null);
     location.replace('/'); // sai do /01, /recepcao... senão voltaria pro mesmo papel
   }
@@ -1062,6 +1078,8 @@ function iniciarRecepcao() {
       const t0 = Date.now();
       fetch(url).then(res => {
         if (!res.ok) return res.text().then(msg => { throw new Error(res.status + ' ' + msg.slice(0, 200)); });
+        const tipo = res.headers.get('content-type') || '';
+        if (!tipo.startsWith('audio/')) throw new Error('resposta não é áudio (' + tipo + ')');
         return res.blob();
       }).then(blob => {
         if (concluido) return;
@@ -1167,6 +1185,7 @@ function iniciarRecepcao() {
     anunciar(ultimoChamado, 1, () => { processando = false; processarFila(); });
   };
 
+  document.getElementById('limparRecepcao').onclick = limparChamados;
   document.getElementById('trocarSalaRecepcao').onclick = () => {
     if (!confirm('Trocar o papel desta tela?')) return;
     sairDaRecepcao();
