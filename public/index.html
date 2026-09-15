@@ -385,7 +385,7 @@
         <button id="btnRepetir" class="repetir-btn" disabled>🔁 Repetir chamada</button>
       </div>
       <div>
-        <div class="side-title">ÚLTIMOS CHAMADOS</div>
+        <div class="side-title">ÚLTIMOS CHAMADOS<span id="filaAviso"></span></div>
         <div class="history" id="historico">
           <div class="empty-hist">Sem chamados anteriores.</div>
         </div>
@@ -844,36 +844,36 @@ function iniciarCaller(sala) {
     if (historicoSala.length !== antes) renderHistoricoSala();
   });
 
-  // bloqueia o botão Chamar enquanto a recepção estiver anunciando outro chamado —
-  // impede que 2 chamados se sobreponham na fala
-  let ocupado = false;
+  // Pode chamar mesmo com a TV anunciando outro paciente: a recepção guarda os
+  // chamados numa fila e anuncia um depois do outro (ver processarFila). Antes o botão
+  // ficava travado em "Aguarde...", e quem chamava não sabia se o envio tinha valido.
+  let falandoNaTv = false;
+  let enviando = false; // trava curta só pra não enviar o mesmo nome em dois cliques
   function atualizarBotaoChamar() {
-    btnChamarEl.disabled = ocupado || salaBloqueada;
-    btnChamarEl.textContent = ocupado ? 'Aguarde...' : 'Chamar';
+    btnChamarEl.disabled = salaBloqueada || enviando;
+    btnChamarEl.textContent = 'Chamar';
   }
-  db.ref(DB.falando).on('value', snap => {
-    ocupado = !!snap.val();
-    atualizarBotaoChamar();
-    if (ocupado) {
-      feedbackEl.style.color = '';
-      feedbackEl.textContent = 'Aguarde, chamada em andamento na recepção...';
-    } else if (feedbackEl.textContent === 'Aguarde, chamada em andamento na recepção...') {
-      feedbackEl.textContent = '';
-    }
-  });
+  db.ref(DB.falando).on('value', snap => { falandoNaTv = !!snap.val(); });
 
   function chamar() {
-    if (ocupado || salaBloqueada) return;
+    if (salaBloqueada || enviando) return;
     const nome = inputEl.value.trim();
     if (!nome) { inputEl.focus(); return; }
+    const naFila = falandoNaTv;
+    enviando = true;
+    atualizarBotaoChamar();
+    setTimeout(() => { enviando = false; atualizarBotaoChamar(); }, 1000);
     db.ref(DB.chamadas).push({
       sala: sala,
       nome: nome.toUpperCase(),
       ts: firebase.database.ServerValue.TIMESTAMP
     }).then(() => {
       feedbackEl.style.color = '';
-      feedbackEl.textContent = 'Chamado enviado.';
-      setTimeout(() => { if (!ocupado) feedbackEl.textContent = ''; }, 2000);
+      feedbackEl.textContent = naFila
+        ? 'Chamado enviado — a TV está anunciando outro, o seu entra na sequência.'
+        : 'Chamado enviado.';
+      // a lista "últimos chamados desta sala" logo abaixo confirma o que foi enviado
+      setTimeout(() => { feedbackEl.textContent = ''; }, 4000);
     }).catch(err => {
       feedbackEl.style.color = '#ff8a80';
       feedbackEl.textContent = 'Erro ao enviar: ' + err.message;
@@ -896,6 +896,7 @@ function iniciarRecepcao() {
   const statusEl = document.getElementById('status');
   const diagnosticoEl = document.getElementById('diagnostico');
   const btnRepetir = document.getElementById('btnRepetir');
+  const filaAvisoEl = document.getElementById('filaAviso');
   const btnMudo = document.getElementById('btnMudo');
 
   let filaChamados = [];
@@ -1212,10 +1213,17 @@ function iniciarRecepcao() {
     });
   }
 
+  function renderFila() {
+    const n = filaChamados.length;
+    filaAvisoEl.textContent = n ? '  ·  ' + n + ' na fila' : '';
+  }
+
   function processarFila() {
+    renderFila();
     if (processando || filaChamados.length === 0) return;
     processando = true;
     const chamado = filaChamados.shift();
+    renderFila();
 
     chamandoNomeEl.textContent = chamado.nome;
     chamandoNomeEl.classList.remove('empty');
@@ -1258,9 +1266,14 @@ function iniciarRecepcao() {
     if (!val || !val.nome || !val.sala) return;
     filaChamados.push({ key: snap.key, ...val });
     processarFila();
+    renderFila();
   }
   // limpeza das 18h (Worker apaga tudo em chamadas/): tira da tela também
   function chamadoApagado(snap) {
+    // limpeza (18h ou botão): quem ainda não foi anunciado sai da fila
+    const naFila = filaChamados.length;
+    filaChamados = filaChamados.filter(c => c.key !== snap.key);
+    if (filaChamados.length !== naFila) renderFila();
     const antes = historico.length;
     historico = historico.filter(h => h.key !== snap.key);
     if (historico.length !== antes) renderHistorico();
