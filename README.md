@@ -34,7 +34,9 @@ Digitar o nome, Enter ou "Chamar". A TV anuncia 2x. Pode chamar mesmo com a TV
 anunciando o paciente de outra sala: os chamados entram numa fila e são anunciados em
 sequência (a TV mostra "N na fila"). A própria sala fica travada do envio até a TV
 terminar de anunciar o chamado dela: o botão mostra "Na fila..." e depois
-"Anunciando...". Se a TV estiver fechada ou muda, a trava solta sozinha em 1 minuto.
+"Anunciando...". Na prática são poucos segundos: solta assim que a TV termina o
+anúncio. Se nenhuma TV estiver ativa, solta em 5s; se a TV estiver aberta mas parar de
+responder, em 25s.
 Mesma sala aberta em dois PCs: a segunda fica bloqueada até alguém clicar
 "Assumir nesta tela".
 

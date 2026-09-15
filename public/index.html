@@ -853,12 +853,24 @@ function iniciarCaller(sala) {
   // ficava travado em "Aguarde...", e quem chamava não sabia se o envio tinha valido.
   // A trava desta sala vale do envio até a TV terminar de anunciar O CHAMADO DELA
   // (painel/anunciando). Chamado de outra sala não trava ninguém.
-  const ESPERA_MAX_MS = 60000; // rede lenta, TV muda ou fechada: solta sozinho
+  // Rede de segurança pra sala não ficar travada se a TV parar de responder. O relógio
+  // é reiniciado a cada sinal de que a TV está trabalhando (mudou de chamado no ar ou
+  // começou/parou de falar), então com fila andando a trava só solta quando é a vez dela.
+  // 25s: acima do limite de 15s que a TV espera por um áudio que não vem (ver falar()),
+  // e bem acima do intervalo normal entre sinais (uma fala leva ~5s)
+  const ESPERA_SEM_SINAL_MS = 25000;
+  const ESPERA_SEM_TV_MS = 5000;     // nenhuma TV ativa: ninguém vai anunciar
   let falandoNaTv = false;
+  let tvViva = false;
   let enviando = false;        // trava curta contra clique duplo
   let meuChamado = null;       // chave do chamado desta sala que ainda não terminou
   let meuChamadoNoAr = false;  // a TV está anunciando justamente o desta sala
   let soltarDepois = null;
+  function reagendarSolta() {
+    if (!meuChamado) return;
+    clearTimeout(soltarDepois);
+    soltarDepois = setTimeout(liberarMeuChamado, tvViva ? ESPERA_SEM_SINAL_MS : ESPERA_SEM_TV_MS);
+  }
   function liberarMeuChamado() {
     meuChamado = null;
     meuChamadoNoAr = false;
@@ -869,10 +881,15 @@ function iniciarCaller(sala) {
     btnChamarEl.disabled = salaBloqueada || enviando || !!meuChamado;
     btnChamarEl.textContent = meuChamadoNoAr ? 'Anunciando...' : (meuChamado ? 'Na fila...' : 'Chamar');
   }
-  db.ref(DB.falando).on('value', snap => { falandoNaTv = !!snap.val(); });
+  db.ref(DB.falando).on('value', snap => { falandoNaTv = !!snap.val(); reagendarSolta(); });
+  db.ref(DB.recepcaoAtiva).on('value', snap => {
+    const tv = snap.val();
+    tvViva = !!(tv && tv.ts && (agoraServidor() - tv.ts) < MORTA_APOS_MS);
+  });
   db.ref(DB.anunciando).on('value', snap => {
     const noAr = snap.val();
     if (!meuChamado) { atualizarBotaoChamar(); return; }
+    reagendarSolta(); // a TV deu sinal de vida: reinicia a rede de segurança
     if (noAr && noAr.key === meuChamado) {
       meuChamadoNoAr = true;           // entrou no ar
     } else if (meuChamadoNoAr) {
@@ -892,9 +909,7 @@ function iniciarCaller(sala) {
     meuChamado = ref.key; // trava esta sala até a TV terminar de anunciar este chamado
     atualizarBotaoChamar();
     setTimeout(() => { enviando = false; atualizarBotaoChamar(); }, 1000);
-    // rede, TV muda ou fechada: não deixa a sala travada pra sempre
-    clearTimeout(soltarDepois);
-    soltarDepois = setTimeout(liberarMeuChamado, ESPERA_MAX_MS);
+    reagendarSolta(); // rede de segurança, caso a TV não responda
     ref.set({
       sala: sala,
       nome: nome.toUpperCase(),
