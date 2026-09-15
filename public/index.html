@@ -516,6 +516,9 @@ const DB = {
   salasAtivas: 'painel/salas_ativas',  // uma entrada por sala, mesma trava da recepção
   versao: 'painel/versao',
   limpeza: 'painel/limpeza',  // { ts, tipo: 'automatica'|'manual', origem } da última limpeza
+  // chamado que a TV está anunciando agora: { key, sala, nome, ts } ou nada. É por ele
+  // que a sala sabe que o SEU chamado terminou (painel/falando só diz que alguém fala)
+  anunciando: 'painel/anunciando',
   // último batimento de cada papel, que NÃO é apagado ao desconectar (o registro da trava
   // some junto com a tela). É o que permite ao /monitor dizer "TV inativa desde 17:32"
   tvUltimoSinal: 'painel/tv_ultimo_sinal',
@@ -839,6 +842,7 @@ function iniciarCaller(sala) {
   // às 18h o Worker apaga todos os chamados do banco (LIMPEZA em src/worker.js);
   // some da tela também, sem precisar recarregar
   historicoSalaRef.on('child_removed', snap => {
+    if (meuChamado === snap.key) liberarMeuChamado(); // apagado antes de ser anunciado
     const antes = historicoSala.length;
     historicoSala = historicoSala.filter(h => h.key !== snap.key);
     if (historicoSala.length !== antes) renderHistoricoSala();
@@ -847,23 +851,51 @@ function iniciarCaller(sala) {
   // Pode chamar mesmo com a TV anunciando outro paciente: a recepção guarda os
   // chamados numa fila e anuncia um depois do outro (ver processarFila). Antes o botão
   // ficava travado em "Aguarde...", e quem chamava não sabia se o envio tinha valido.
+  // A trava desta sala vale do envio até a TV terminar de anunciar O CHAMADO DELA
+  // (painel/anunciando). Chamado de outra sala não trava ninguém.
+  const ESPERA_MAX_MS = 60000; // rede lenta, TV muda ou fechada: solta sozinho
   let falandoNaTv = false;
-  let enviando = false; // trava curta só pra não enviar o mesmo nome em dois cliques
+  let enviando = false;        // trava curta contra clique duplo
+  let meuChamado = null;       // chave do chamado desta sala que ainda não terminou
+  let meuChamadoNoAr = false;  // a TV está anunciando justamente o desta sala
+  let soltarDepois = null;
+  function liberarMeuChamado() {
+    meuChamado = null;
+    meuChamadoNoAr = false;
+    clearTimeout(soltarDepois);
+    atualizarBotaoChamar();
+  }
   function atualizarBotaoChamar() {
-    btnChamarEl.disabled = salaBloqueada || enviando;
-    btnChamarEl.textContent = 'Chamar';
+    btnChamarEl.disabled = salaBloqueada || enviando || !!meuChamado;
+    btnChamarEl.textContent = meuChamadoNoAr ? 'Anunciando...' : (meuChamado ? 'Na fila...' : 'Chamar');
   }
   db.ref(DB.falando).on('value', snap => { falandoNaTv = !!snap.val(); });
+  db.ref(DB.anunciando).on('value', snap => {
+    const noAr = snap.val();
+    if (!meuChamado) { atualizarBotaoChamar(); return; }
+    if (noAr && noAr.key === meuChamado) {
+      meuChamadoNoAr = true;           // entrou no ar
+    } else if (meuChamadoNoAr) {
+      liberarMeuChamado();             // saiu do ar: terminou de ser anunciado
+      return;
+    }
+    atualizarBotaoChamar();
+  });
 
   function chamar() {
-    if (salaBloqueada || enviando) return;
+    if (salaBloqueada || enviando || meuChamado) return;
     const nome = inputEl.value.trim();
     if (!nome) { inputEl.focus(); return; }
     const naFila = falandoNaTv;
     enviando = true;
+    const ref = db.ref(DB.chamadas).push();
+    meuChamado = ref.key; // trava esta sala até a TV terminar de anunciar este chamado
     atualizarBotaoChamar();
     setTimeout(() => { enviando = false; atualizarBotaoChamar(); }, 1000);
-    db.ref(DB.chamadas).push({
+    // rede, TV muda ou fechada: não deixa a sala travada pra sempre
+    clearTimeout(soltarDepois);
+    soltarDepois = setTimeout(liberarMeuChamado, ESPERA_MAX_MS);
+    ref.set({
       sala: sala,
       nome: nome.toUpperCase(),
       ts: firebase.database.ServerValue.TIMESTAMP
@@ -877,6 +909,7 @@ function iniciarCaller(sala) {
     }).catch(err => {
       feedbackEl.style.color = '#ff8a80';
       feedbackEl.textContent = 'Erro ao enviar: ' + err.message;
+      liberarMeuChamado(); // não foi pro banco: libera o botão na hora
     });
     inputEl.value = '';
     inputEl.focus();
@@ -912,6 +945,20 @@ function iniciarRecepcao() {
   let substituida = false;
   let ativaFalando = false; // esta tela é quem controla painel/falando
   const estadoRef = db.ref(DB.falando);
+  const anunciandoRef = db.ref(DB.anunciando);
+  // marca/desmarca o chamado que está no ar, pra sala de origem travar o Chamar só
+  // enquanto O CHAMADO DELA é anunciado (as outras salas seguem livres)
+  function marcarNoAr(chamado) {
+    if (!ativaFalando) return;
+    anunciandoRef.set({
+      key: chamado.key || '-', sala: chamado.sala, nome: chamado.nome,
+      ts: firebase.database.ServerValue.TIMESTAMP
+    }).catch(() => {}); // só informativo: se a regra faltar, o chamado acontece igual
+  }
+  function limparNoAr() {
+    if (!ativaFalando) return;
+    anunciandoRef.remove().catch(() => {});
+  }
   const trava = travaDePapel(db.ref(DB.recepcaoAtiva), (ativa, outra) => {
     substituida = !ativa;
     if (ativa && !ativaFalando) {
@@ -921,17 +968,20 @@ function iniciarRecepcao() {
       // no meio de uma fala, o Firebase zera sozinho ao detectar a desconexão
       estadoRef.set(false);
       estadoRef.onDisconnect().set(false);
+      anunciandoRef.remove();
+      anunciandoRef.onDisconnect().remove();
     }
     if (substituida) {
       // espelho não mexe mais em painel/falando: se fechasse, zeraria a trava no meio
       // da fala da recepção ativa
-      if (ativaFalando) { ativaFalando = false; estadoRef.onDisconnect().cancel(); }
+      if (ativaFalando) { ativaFalando = false; estadoRef.onDisconnect().cancel(); anunciandoRef.onDisconnect().cancel(); }
       mostrarBloqueio('Outra tela está ativa como recepção',
         'Último sinal dela às ' + horaDe(outra && outra.ts) + '. Esta só espelha os chamados; quem fala é a outra.',
         trava.assumir, sairDaRecepcao);
       if (audioAtual) audioAtual.pause();
       if (window.speechSynthesis) speechSynthesis.cancel();
       if (finalizarFalaAtual) finalizarFalaAtual();
+      anunciandoRef.remove().catch(() => {});
     } else {
       esconderBloqueio();
     }
@@ -1224,6 +1274,7 @@ function iniciarRecepcao() {
     processando = true;
     const chamado = filaChamados.shift();
     renderFila();
+    marcarNoAr(chamado);
 
     chamandoNomeEl.textContent = chamado.nome;
     chamandoNomeEl.classList.remove('empty');
@@ -1237,6 +1288,7 @@ function iniciarRecepcao() {
 
     anunciar(chamado, REPETICOES_CHAMADO, () => {
       processando = false;
+      limparNoAr();
       processarFila();
     });
   }
@@ -1299,7 +1351,8 @@ function iniciarRecepcao() {
   btnRepetir.onclick = () => {
     if (!ultimoChamado || processando) return;
     processando = true;
-    anunciar(ultimoChamado, 1, () => { processando = false; processarFila(); });
+    marcarNoAr(ultimoChamado);
+    anunciar(ultimoChamado, 1, () => { processando = false; limparNoAr(); processarFila(); });
   };
 
   document.getElementById('limparRecepcao').onclick = limparChamados;
@@ -1361,11 +1414,16 @@ function iniciarMonitor() {
   db.ref(DB.tvUltimoSinal).on('value', snap => { tvUltimo = snap.val(); renderTv(); });
   setInterval(renderTv, 1000);
 
-  db.ref(DB.falando).on('value', snap => {
-    const f = !!snap.val();
-    falandoEl.textContent = f ? 'Sim, anunciando' : 'Não';
-    falandoEl.className = 'v ' + (f ? 'mon-ok' : '');
-  });
+  let falandoTv = false;
+  let noAr = null;
+  function renderFalando() {
+    falandoEl.textContent = falandoTv
+      ? (noAr ? noAr.nome + ' · ' + noAr.sala : 'Sim, anunciando')
+      : 'Não';
+    falandoEl.className = 'v ' + (falandoTv ? 'mon-ok' : '');
+  }
+  db.ref(DB.falando).on('value', snap => { falandoTv = !!snap.val(); renderFalando(); });
+  db.ref(DB.anunciando).on('value', snap => { noAr = snap.val(); renderFalando(); });
 
   const limpezaEl = document.getElementById('monLimpeza');
   db.ref(DB.limpeza).on('value', snap => {

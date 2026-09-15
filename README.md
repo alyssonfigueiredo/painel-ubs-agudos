@@ -31,9 +31,12 @@ Tecla `D` na TV mostra/esconde o diagnóstico; no console, `painelLog()` lista o
 ## Consultórios
 
 Digitar o nome, Enter ou "Chamar". A TV anuncia 2x. Pode chamar mesmo com a TV
-anunciando outro paciente: os chamados entram numa fila e são anunciados em sequência
-(a TV mostra "N na fila"). Mesma sala aberta em dois PCs: a segunda fica bloqueada até
-alguém clicar "Assumir nesta tela".
+anunciando o paciente de outra sala: os chamados entram numa fila e são anunciados em
+sequência (a TV mostra "N na fila"). A própria sala fica travada do envio até a TV
+terminar de anunciar o chamado dela: o botão mostra "Na fila..." e depois
+"Anunciando...". Se a TV estiver fechada ou muda, a trava solta sozinha em 1 minuto.
+Mesma sala aberta em dois PCs: a segunda fica bloqueada até alguém clicar
+"Assumir nesta tela".
 
 ## Privacidade
 
