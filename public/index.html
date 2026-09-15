@@ -1099,10 +1099,25 @@ function iniciarRecepcao() {
     return String(texto)
       .toLowerCase()
       .replace(/(^|[\s\-])(\S)/g, (m, sep, c) => sep + c.toUpperCase())
+      // "Sala De Vacina" / "Maria Da Silva": preposição no meio volta pra minúscula
+      .replace(/\s(De|Da|Do|Das|Dos|E|Em)\b/g, (m, p) => ' ' + p.toLowerCase())
       .replace(/\b0+(\d)/g, '$1');
   }
+  // "Comparecer ao consultório 1" / "Comparecer à triagem": o artigo depende do gênero
+  // da sala. Mapa pras salas que existem; a regra do fim serve pra qualquer sala nova
+  // (-a, -agem, -ção/-são são femininas em português; -o e -or, masculinas).
+  const ARTIGO_SALA = {
+    'Consultório 01': 'ao', 'Consultório 02': 'ao', 'Consultório 03': 'ao', 'Consultório 04': 'ao',
+    'Odontologia': 'à', 'Nutrição': 'à', 'Enfermagem': 'à', 'Triagem': 'à',
+    'Sala de Vacina': 'à', 'Sala de Medicação': 'à'
+  };
+  function artigoDaSala(sala) {
+    if (ARTIGO_SALA[sala]) return ARTIGO_SALA[sala];
+    const primeira = String(sala).trim().split(/\s+/)[0].toLowerCase();
+    return /(a|agem|ção|são)$/.test(primeira) ? 'à' : 'ao';
+  }
   function textoChamado(chamado) {
-    return `Atenção, ${paraFala(chamado.nome)}. Comparecer ao ${paraFala(chamado.sala)}.`;
+    return `Atenção, ${paraFala(chamado.nome)}. Comparecer ${artigoDaSala(chamado.sala)} ${paraFala(chamado.sala)}.`;
   }
 
   // cada etapa da fala vira um trecho na linha de diagnóstico (em vez de sobrescrever),
