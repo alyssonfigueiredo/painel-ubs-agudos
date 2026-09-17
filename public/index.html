@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>UBS Francisca de Oliveira Silva — Painel de Chamada</title>
+<!-- título da aba: trocado pelo JS conforme o papel da tela (ver definirTitulo) -->
+<title>Painel — UBS Francisca de Oliveira Silva</title>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -548,6 +549,14 @@ function mostrarView(nome) {
   views[nome].classList.add('active');
 }
 
+// título da aba/janela por papel: "Painel — Recepção", "Painel — Consultório 03"...
+// ajuda quem opera vários PCs ou deixa várias abas abertas
+const TITULO_BASE = 'Painel';
+const TITULO_PADRAO = 'UBS Francisca de Oliveira Silva';
+function definirTitulo(sufixo) {
+  document.title = TITULO_BASE + ' — ' + (sufixo || TITULO_PADRAO);
+}
+
 // ---------------- roteamento por papel ----------------
 // Ao ACESSAR o site, cai na escolha de sala. O papel fica só na aba (sessionStorage):
 // um F5 ou a recarga automática de deploy mantém a sala; uma aba nova / outro PC
@@ -587,15 +596,19 @@ function init() {
   const papel = daUrl || papelSalvo(); // 'recepcao' ou nome de uma sala
   if (daUrl && daUrl !== 'monitor') guardarPapel(daUrl);
   if (papel === 'monitor') {
+    definirTitulo('Monitor');
     mostrarView('monitor');
     iniciarMonitor();
   } else if (papel === 'recepcao') {
+    definirTitulo('Recepção');
     mostrarView('recepcao');
     iniciarRecepcao();
   } else if (papel && SALAS.includes(papel)) {
+    definirTitulo(papel);
     mostrarView('caller');
     iniciarCaller(papel);
   } else {
+    definirTitulo();
     mostrarView('picker');
     montarPicker();
   }
@@ -768,6 +781,7 @@ function montarPicker() {
     btn.className = 'sala-btn';
     btn.onclick = () => {
       guardarPapel(sala);
+      definirTitulo(sala);
       mostrarView('caller');
       iniciarCaller(sala);
     };
@@ -775,6 +789,7 @@ function montarPicker() {
   });
   document.getElementById('btnRecepcao').onclick = () => {
     guardarPapel('recepcao');
+    definirTitulo('Recepção');
     mostrarView('recepcao');
     iniciarRecepcao();
   };
