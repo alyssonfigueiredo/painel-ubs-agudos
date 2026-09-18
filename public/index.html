@@ -447,11 +447,14 @@
           <div class="v" id="monAudio">…</div>
           <div class="sub3" id="monAudioSub"></div>
           <div style="margin-top:14px">
-            <button class="mon-btn" data-ganho="0">🔊 Testar som</button>
-            <button class="mon-btn" data-ganho="6">🔊 Testar +6 dB</button>
-            <button class="mon-btn" data-ganho="10">🔊 Testar +10 dB</button>
+            <button class="mon-btn" data-ganho="0" data-silencioso="1">🔍 Verificar sem tocar</button>
           </div>
-          <div class="sub3" id="monTesteSub" style="margin-top:8px">O som sai na recepção. Mede o nível e devolve o resultado aqui.</div>
+          <div style="margin-top:6px">
+            <button class="mon-btn" data-ganho="0">🔊 Tocar na recepção</button>
+            <button class="mon-btn" data-ganho="6">🔊 Tocar +6 dB</button>
+            <button class="mon-btn" data-ganho="10">🔊 Tocar +10 dB</button>
+          </div>
+          <div class="sub3" id="monTesteSub" style="margin-top:8px">A verificação é camuflada: não faz som, não aparece na TV e não mexe em nada. Os três de baixo tocam no alto-falante e os pacientes ouvem (pedem confirmação).</div>
         </div>
         <div class="mon-card">
           <div class="t">SALAS (TELA ABERTA OU ÚLTIMA VEZ)</div>
@@ -1378,26 +1381,31 @@ function iniciarRecepcao() {
     ultimoTeste = p.pedido;
     if (agoraServidor() - p.pedido > 120000) return; // pedido velho: ignora
     if (processando) { registrarStatus({ tipo: 'teste', erro: 'TV ocupada anunciando um chamado' }); return; }
-    tocarTeste(Number(p.ganho) || 0);
+    tocarTeste(Number(p.ganho) || 0, !!p.silencioso);
   });
-  function tocarTeste(ganho) {
+  // silencioso = toca com volume zero: ninguém na recepção ouve, mas ainda dá pra saber
+  // se o /tts respondeu, qual o nível do áudio e se o navegador liberou tocar sozinho
+  function tocarTeste(ganho, silencioso) {
     const texto = 'Teste de som do painel da recepção.';
     const t0 = Date.now();
-    diag('teste de som pedido de longe (ganho ' + ganho + ' dB)');
+    diag('teste ' + (silencioso ? 'silencioso' : 'com som') + ' pedido de longe (ganho ' + ganho + ' dB)');
     fetch(urlTts(texto, ganho)).then(res => {
       if (!res.ok) return res.text().then(m => { throw new Error(res.status + ' ' + m.slice(0, 120)); });
       return res.blob();
     }).then(blob => {
       medirNivel(blob).then(n => {
+        const tipo = silencioso ? 'verificacao' : 'teste';
         const audio = new Audio(URL.createObjectURL(blob));
+        if (silencioso) audio.volume = 0;
         audio.onended = () => URL.revokeObjectURL(audio.src);
         audio.play().then(() => {
-          registrarStatus(Object.assign({ tipo: 'teste', fonte: 'tts', ganhoTeste: ganho, ms: Date.now() - t0, liberou: comoLiberou }, n || {}));
+          if (silencioso) setTimeout(() => { try { audio.pause(); } catch (e) {} }, 300);
+          registrarStatus(Object.assign({ tipo: tipo, fonte: 'tts', ganhoTeste: ganho, ms: Date.now() - t0, liberou: comoLiberou }, n || {}));
         }).catch(err => {
-          registrarStatus({ tipo: 'teste', fonte: 'tts', ganhoTeste: ganho, erro: 'play() ' + (err && err.name ? err.name : err) });
+          registrarStatus({ tipo: tipo, fonte: 'tts', ganhoTeste: ganho, erro: 'play() ' + (err && err.name ? err.name : err) });
         });
       });
-    }).catch(err => registrarStatus({ tipo: 'teste', ganhoTeste: ganho, erro: String(err.message).slice(0, 120) }));
+    }).catch(err => registrarStatus({ tipo: silencioso ? 'verificacao' : 'teste', ganhoTeste: ganho, erro: String(err.message).slice(0, 120) }));
   }
 
   function processarFila() {
@@ -1578,17 +1586,22 @@ function iniciarMonitor() {
       // caiu na voz do navegador (o /tts falhou) ou nem tocou
       audioEl2.textContent = st.fonte === 'navegador' ? 'voz do navegador (mais baixa)' : 'Falhou';
       audioEl2.className = 'v mon-bad';
-      audioSubEl.textContent = (st.tipo === 'teste' ? 'Teste' : 'Chamado' + (st.sala ? ' · ' + st.sala : '')) +
-        ' de ' + quando + ': ' + st.erro;
+      const rotuloErro = st.tipo === 'teste' ? 'Teste com som'
+        : st.tipo === 'verificacao' ? 'Verificação silenciosa'
+        : 'Chamado' + (st.sala ? ' · ' + st.sala : '');
+      audioSubEl.textContent = rotuloErro + ' de ' + quando + ': ' + st.erro;
       return;
     }
     const voz = st.fonte === 'tts' ? 'voz Google (Orus)' : 'voz do navegador';
     audioEl2.textContent = voz;
     audioEl2.className = 'v ' + (st.fonte === 'tts' ? 'mon-ok' : 'mon-bad');
-    const partes = [(st.tipo === 'teste' ? 'Teste' : 'Chamado' + (st.sala ? ' · ' + st.sala : '')) + ' às ' + quando];
+    const rotulo = st.tipo === 'teste' ? 'Teste com som'
+      : st.tipo === 'verificacao' ? 'Verificação silenciosa'
+      : 'Chamado' + (st.sala ? ' · ' + st.sala : '');
+    const partes = [rotulo + ' às ' + quando];
     if (st.picoDb !== undefined) partes.push('pico ' + st.picoDb + ' dB, média ' + st.rmsDb + ' dB');
     if (st.duracao) partes.push(st.duracao + 's');
-    const g = st.tipo === 'teste' ? st.ganhoTeste : st.ganho;
+    const g = st.tipo === 'chamado' ? st.ganho : st.ganhoTeste;
     if (g) partes.push('ganho +' + g + ' dB');
     if (st.mudo) partes.push('TV NO MUDO');
     audioSubEl.textContent = partes.join(' · ');
@@ -1596,10 +1609,13 @@ function iniciarMonitor() {
   document.querySelectorAll('.mon-btn').forEach(btn => {
     btn.onclick = () => {
       const ganho = Number(btn.dataset.ganho) || 0;
+      const silencioso = btn.dataset.silencioso === '1';
+      // os pacientes ouvem: confirma antes, pra ninguém disparar som por engano
+      if (!silencioso && !confirm('Isso vai tocar uma frase de teste no alto-falante da recepção, e os pacientes vão ouvir. Continuar?')) return;
       document.querySelectorAll('.mon-btn').forEach(b => { b.disabled = true; });
       setTimeout(() => document.querySelectorAll('.mon-btn').forEach(b => { b.disabled = false; }), 6000);
       document.getElementById('monTesteSub').textContent = 'Pedido enviado, aguarde o resultado...';
-      db.ref(DB.testeSom).set({ pedido: firebase.database.ServerValue.TIMESTAMP, ganho: ganho })
+      db.ref(DB.testeSom).set({ pedido: firebase.database.ServerValue.TIMESTAMP, ganho: ganho, silencioso: silencioso })
         .catch(err => { document.getElementById('monTesteSub').textContent = 'Não consegui pedir: ' + err.message; });
     };
   });
