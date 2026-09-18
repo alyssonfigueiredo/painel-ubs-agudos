@@ -1397,11 +1397,25 @@ function iniciarRecepcao() {
         const tipo = silencioso ? 'verificacao' : 'teste';
         const audio = new Audio(URL.createObjectURL(blob));
         if (silencioso) audio.volume = 0;
-        audio.onended = () => URL.revokeObjectURL(audio.src);
+        // teste COM SOM: segura a fila enquanto a frase toca, senão um chamado que
+        // chegasse no meio sairia falando por cima. Chamados esperam ~2s e entram
+        // normalmente depois. O silencioso não precisa: não sai som.
+        let liberou = silencioso;
+        function liberarFila() {
+          if (liberou) return;
+          liberou = true;
+          processando = false;
+          processarFila();
+        }
+        if (!silencioso) processando = true;
+        audio.onended = () => { URL.revokeObjectURL(audio.src); liberarFila(); };
+        audio.onerror = () => liberarFila();
         audio.play().then(() => {
           if (silencioso) setTimeout(() => { try { audio.pause(); } catch (e) {} }, 300);
+          else setTimeout(liberarFila, 15000); // rede travada: não segura a fila pra sempre
           registrarStatus(Object.assign({ tipo: tipo, fonte: 'tts', ganhoTeste: ganho, ms: Date.now() - t0, liberou: comoLiberou }, n || {}));
         }).catch(err => {
+          liberarFila();
           registrarStatus({ tipo: tipo, fonte: 'tts', ganhoTeste: ganho, erro: 'play() ' + (err && err.name ? err.name : err) });
         });
       });
