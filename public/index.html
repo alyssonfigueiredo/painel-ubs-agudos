@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>UBS Francisca de Oliveira Silva — Painel de Chamada</title>
+<!-- título da aba: trocado pelo JS conforme o papel da tela (ver definirTitulo) -->
+<title>Painel — UBS Francisca de Oliveira Silva</title>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -286,6 +287,13 @@
   .mon-lista li:last-child { border-bottom: none; }
   .mon-lista .d { color: var(--text-dim); font-size: 14px; white-space: nowrap; }
   .mon-nota { color: var(--text-dim); font-size: 13px; margin-top: 10px; }
+  .mon-btn {
+    background: transparent; color: var(--text); border: 1px solid var(--line);
+    padding: 9px 14px; font-weight: 600; font-size: 13px; border-radius: 10px;
+    cursor: pointer; font-family: inherit; margin: 0 6px 6px 0;
+  }
+  .mon-btn:hover { border-color: var(--coral); }
+  .mon-btn:disabled { opacity: .4; cursor: default; }
 
   .mudo-btn.mudo-ativo {
     background: #7a1f1f;
@@ -385,7 +393,7 @@
         <button id="btnRepetir" class="repetir-btn" disabled>🔁 Repetir chamada</button>
       </div>
       <div>
-        <div class="side-title">ÚLTIMOS CHAMADOS</div>
+        <div class="side-title">ÚLTIMOS CHAMADOS<span id="filaAviso"></span></div>
         <div class="history" id="historico">
           <div class="empty-hist">Sem chamados anteriores.</div>
         </div>
@@ -433,6 +441,20 @@
           <div class="t">ÚLTIMA LIMPEZA DOS CHAMADOS</div>
           <div class="v" id="monLimpeza">…</div>
           <div class="sub3" id="monLimpezaSub">Automática todo dia às 18h; manual pelo botão "Limpar chamados".</div>
+        </div>
+        <div class="mon-card">
+          <div class="t">ÁUDIO DA TV (ÚLTIMA FALA)</div>
+          <div class="v" id="monAudio">…</div>
+          <div class="sub3" id="monAudioSub"></div>
+          <div style="margin-top:14px">
+            <button class="mon-btn" data-ganho="0" data-silencioso="1">🔍 Verificar sem tocar</button>
+          </div>
+          <div style="margin-top:6px">
+            <button class="mon-btn" data-ganho="0">🔊 Tocar na recepção</button>
+            <button class="mon-btn" data-ganho="6">🔊 Tocar +6 dB</button>
+            <button class="mon-btn" data-ganho="10">🔊 Tocar +10 dB</button>
+          </div>
+          <div class="sub3" id="monTesteSub" style="margin-top:8px">A verificação é camuflada: não faz som, não aparece na TV e não mexe em nada. Os três de baixo tocam no alto-falante e os pacientes ouvem (pedem confirmação).</div>
         </div>
         <div class="mon-card">
           <div class="t">SALAS (TELA ABERTA OU ÚLTIMA VEZ)</div>
@@ -516,8 +538,14 @@ const DB = {
   salasAtivas: 'painel/salas_ativas',  // uma entrada por sala, mesma trava da recepção
   versao: 'painel/versao',
   limpeza: 'painel/limpeza',  // { ts, tipo: 'automatica'|'manual', origem } da última limpeza
+  // chamado que a TV está anunciando agora: { key, sala, nome, ts } ou nada. É por ele
+  // que a sala sabe que o SEU chamado terminou (painel/falando só diz que alguém fala)
+  anunciando: 'painel/anunciando',
   // último batimento de cada papel, que NÃO é apagado ao desconectar (o registro da trava
   // some junto com a tela). É o que permite ao /monitor dizer "TV inativa desde 17:32"
+  // relatório do áudio da TV (pra diagnosticar de longe, sem ninguém apertar tecla lá)
+  tvStatus: 'painel/tv_status',
+  testeSom: 'painel/teste_som',
   tvUltimoSinal: 'painel/tv_ultimo_sinal',
   salasUltimoSinal: 'painel/salas_ultimo_sinal'
 };
@@ -543,6 +571,14 @@ const views = {
 function mostrarView(nome) {
   Object.values(views).forEach(v => v.classList.remove('active'));
   views[nome].classList.add('active');
+}
+
+// título da aba/janela por papel: "Painel — Recepção", "Painel — Consultório 03"...
+// ajuda quem opera vários PCs ou deixa várias abas abertas
+const TITULO_BASE = 'Painel';
+const TITULO_PADRAO = 'UBS Francisca de Oliveira Silva';
+function definirTitulo(sufixo) {
+  document.title = TITULO_BASE + ' — ' + (sufixo || TITULO_PADRAO);
 }
 
 // ---------------- roteamento por papel ----------------
@@ -584,15 +620,19 @@ function init() {
   const papel = daUrl || papelSalvo(); // 'recepcao' ou nome de uma sala
   if (daUrl && daUrl !== 'monitor') guardarPapel(daUrl);
   if (papel === 'monitor') {
+    definirTitulo('Monitor');
     mostrarView('monitor');
     iniciarMonitor();
   } else if (papel === 'recepcao') {
+    definirTitulo('Recepção');
     mostrarView('recepcao');
     iniciarRecepcao();
   } else if (papel && SALAS.includes(papel)) {
+    definirTitulo(papel);
     mostrarView('caller');
     iniciarCaller(papel);
   } else {
+    definirTitulo();
     mostrarView('picker');
     montarPicker();
   }
@@ -765,6 +805,7 @@ function montarPicker() {
     btn.className = 'sala-btn';
     btn.onclick = () => {
       guardarPapel(sala);
+      definirTitulo(sala);
       mostrarView('caller');
       iniciarCaller(sala);
     };
@@ -772,6 +813,7 @@ function montarPicker() {
   });
   document.getElementById('btnRecepcao').onclick = () => {
     guardarPapel('recepcao');
+    definirTitulo('Recepção');
     mostrarView('recepcao');
     iniciarRecepcao();
   };
@@ -839,44 +881,89 @@ function iniciarCaller(sala) {
   // às 18h o Worker apaga todos os chamados do banco (LIMPEZA em src/worker.js);
   // some da tela também, sem precisar recarregar
   historicoSalaRef.on('child_removed', snap => {
+    if (meuChamado === snap.key) liberarMeuChamado(); // apagado antes de ser anunciado
     const antes = historicoSala.length;
     historicoSala = historicoSala.filter(h => h.key !== snap.key);
     if (historicoSala.length !== antes) renderHistoricoSala();
   });
 
-  // bloqueia o botão Chamar enquanto a recepção estiver anunciando outro chamado —
-  // impede que 2 chamados se sobreponham na fala
-  let ocupado = false;
-  function atualizarBotaoChamar() {
-    btnChamarEl.disabled = ocupado || salaBloqueada;
-    btnChamarEl.textContent = ocupado ? 'Aguarde...' : 'Chamar';
+  // Pode chamar mesmo com a TV anunciando outro paciente: a recepção guarda os
+  // chamados numa fila e anuncia um depois do outro (ver processarFila). Antes o botão
+  // ficava travado em "Aguarde...", e quem chamava não sabia se o envio tinha valido.
+  // A trava desta sala vale do envio até a TV terminar de anunciar O CHAMADO DELA
+  // (painel/anunciando). Chamado de outra sala não trava ninguém.
+  // Rede de segurança pra sala não ficar travada se a TV parar de responder. O relógio
+  // é reiniciado a cada sinal de que a TV está trabalhando (mudou de chamado no ar ou
+  // começou/parou de falar), então com fila andando a trava só solta quando é a vez dela.
+  // 25s: acima do limite de 15s que a TV espera por um áudio que não vem (ver falar()),
+  // e bem acima do intervalo normal entre sinais (uma fala leva ~5s)
+  const ESPERA_SEM_SINAL_MS = 25000;
+  const ESPERA_SEM_TV_MS = 5000;     // nenhuma TV ativa: ninguém vai anunciar
+  let falandoNaTv = false;
+  let tvViva = false;
+  let enviando = false;        // trava curta contra clique duplo
+  let meuChamado = null;       // chave do chamado desta sala que ainda não terminou
+  let meuChamadoNoAr = false;  // a TV está anunciando justamente o desta sala
+  let soltarDepois = null;
+  function reagendarSolta() {
+    if (!meuChamado) return;
+    clearTimeout(soltarDepois);
+    soltarDepois = setTimeout(liberarMeuChamado, tvViva ? ESPERA_SEM_SINAL_MS : ESPERA_SEM_TV_MS);
   }
-  db.ref(DB.falando).on('value', snap => {
-    ocupado = !!snap.val();
+  function liberarMeuChamado() {
+    meuChamado = null;
+    meuChamadoNoAr = false;
+    clearTimeout(soltarDepois);
     atualizarBotaoChamar();
-    if (ocupado) {
-      feedbackEl.style.color = '';
-      feedbackEl.textContent = 'Aguarde, chamada em andamento na recepção...';
-    } else if (feedbackEl.textContent === 'Aguarde, chamada em andamento na recepção...') {
-      feedbackEl.textContent = '';
+  }
+  function atualizarBotaoChamar() {
+    btnChamarEl.disabled = salaBloqueada || enviando || !!meuChamado;
+    btnChamarEl.textContent = meuChamadoNoAr ? 'Anunciando...' : (meuChamado ? 'Na fila...' : 'Chamar');
+  }
+  db.ref(DB.falando).on('value', snap => { falandoNaTv = !!snap.val(); reagendarSolta(); });
+  db.ref(DB.recepcaoAtiva).on('value', snap => {
+    const tv = snap.val();
+    tvViva = !!(tv && tv.ts && (agoraServidor() - tv.ts) < MORTA_APOS_MS);
+  });
+  db.ref(DB.anunciando).on('value', snap => {
+    const noAr = snap.val();
+    if (!meuChamado) { atualizarBotaoChamar(); return; }
+    reagendarSolta(); // a TV deu sinal de vida: reinicia a rede de segurança
+    if (noAr && noAr.key === meuChamado) {
+      meuChamadoNoAr = true;           // entrou no ar
+    } else if (meuChamadoNoAr) {
+      liberarMeuChamado();             // saiu do ar: terminou de ser anunciado
+      return;
     }
+    atualizarBotaoChamar();
   });
 
   function chamar() {
-    if (ocupado || salaBloqueada) return;
+    if (salaBloqueada || enviando || meuChamado) return;
     const nome = inputEl.value.trim();
     if (!nome) { inputEl.focus(); return; }
-    db.ref(DB.chamadas).push({
+    const naFila = falandoNaTv;
+    enviando = true;
+    const ref = db.ref(DB.chamadas).push();
+    meuChamado = ref.key; // trava esta sala até a TV terminar de anunciar este chamado
+    atualizarBotaoChamar();
+    setTimeout(() => { enviando = false; atualizarBotaoChamar(); }, 1000);
+    reagendarSolta(); // rede de segurança, caso a TV não responda
+    ref.set({
       sala: sala,
       nome: nome.toUpperCase(),
       ts: firebase.database.ServerValue.TIMESTAMP
     }).then(() => {
       feedbackEl.style.color = '';
-      feedbackEl.textContent = 'Chamado enviado.';
-      setTimeout(() => { if (!ocupado) feedbackEl.textContent = ''; }, 2000);
+      feedbackEl.textContent = naFila
+        ? 'Chamado enviado — a TV está anunciando outro, o seu entra na sequência.'
+        : 'Chamado enviado.';
+      // a lista "últimos chamados desta sala" logo abaixo confirma o que foi enviado
+      setTimeout(() => { feedbackEl.textContent = ''; }, 4000);
     }).catch(err => {
       feedbackEl.style.color = '#ff8a80';
       feedbackEl.textContent = 'Erro ao enviar: ' + err.message;
+      liberarMeuChamado(); // não foi pro banco: libera o botão na hora
     });
     inputEl.value = '';
     inputEl.focus();
@@ -896,6 +983,7 @@ function iniciarRecepcao() {
   const statusEl = document.getElementById('status');
   const diagnosticoEl = document.getElementById('diagnostico');
   const btnRepetir = document.getElementById('btnRepetir');
+  const filaAvisoEl = document.getElementById('filaAviso');
   const btnMudo = document.getElementById('btnMudo');
 
   let filaChamados = [];
@@ -911,6 +999,22 @@ function iniciarRecepcao() {
   let substituida = false;
   let ativaFalando = false; // esta tela é quem controla painel/falando
   const estadoRef = db.ref(DB.falando);
+  const anunciandoRef = db.ref(DB.anunciando);
+  // marca/desmarca o chamado que está no ar, pra sala de origem travar o Chamar só
+  // enquanto O CHAMADO DELA é anunciado (as outras salas seguem livres)
+  let salaAtualNoAr = '';
+  function marcarNoAr(chamado) {
+    salaAtualNoAr = chamado.sala || '';
+    if (!ativaFalando) return;
+    anunciandoRef.set({
+      key: chamado.key || '-', sala: chamado.sala, nome: chamado.nome,
+      ts: firebase.database.ServerValue.TIMESTAMP
+    }).catch(() => {}); // só informativo: se a regra faltar, o chamado acontece igual
+  }
+  function limparNoAr() {
+    if (!ativaFalando) return;
+    anunciandoRef.remove().catch(() => {});
+  }
   const trava = travaDePapel(db.ref(DB.recepcaoAtiva), (ativa, outra) => {
     substituida = !ativa;
     if (ativa && !ativaFalando) {
@@ -920,17 +1024,20 @@ function iniciarRecepcao() {
       // no meio de uma fala, o Firebase zera sozinho ao detectar a desconexão
       estadoRef.set(false);
       estadoRef.onDisconnect().set(false);
+      anunciandoRef.remove();
+      anunciandoRef.onDisconnect().remove();
     }
     if (substituida) {
       // espelho não mexe mais em painel/falando: se fechasse, zeraria a trava no meio
       // da fala da recepção ativa
-      if (ativaFalando) { ativaFalando = false; estadoRef.onDisconnect().cancel(); }
+      if (ativaFalando) { ativaFalando = false; estadoRef.onDisconnect().cancel(); anunciandoRef.onDisconnect().cancel(); }
       mostrarBloqueio('Outra tela está ativa como recepção',
         'Último sinal dela às ' + horaDe(outra && outra.ts) + '. Esta só espelha os chamados; quem fala é a outra.',
         trava.assumir, sairDaRecepcao);
       if (audioAtual) audioAtual.pause();
       if (window.speechSynthesis) speechSynthesis.cancel();
       if (finalizarFalaAtual) finalizarFalaAtual();
+      anunciandoRef.remove().catch(() => {});
     } else {
       esconderBloqueio();
     }
@@ -1093,6 +1200,45 @@ function iniciarRecepcao() {
   overlay.onclick = () => { comoLiberou = 'clique'; liberarSom(); };
   tentarLiberarAudio();
 
+  // ganho de volume pedido ao /tts (dB). 0 = como a Google entrega.
+  const GANHO_VOZ_DB = 0;
+  const urlTts = (texto, ganho) => '/tts?q=' + encodeURIComponent(String(texto).slice(0, 200)) +
+    ((ganho || 0) !== 0 ? '&g=' + ganho : '');
+
+  // Mede o nível do MP3 SEM entrar no caminho de reprodução: decodifica uma cópia à
+  // parte. Assim o <audio> continua tocando igual (nada de Web Audio no meio do som,
+  // que é justamente o que custou tanto pra funcionar na TV).
+  function medirNivel(blob) {
+    return blob.arrayBuffer().then(buf => {
+      const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+      const ctxDec = audioCtx || (Ctx ? new Ctx(1, 1, 44100) : null);
+      if (!ctxDec) return null;
+      return new Promise((ok, falha) => {
+        const p = ctxDec.decodeAudioData(buf, ok, falha);
+        if (p && p.then) p.then(ok, falha);
+      });
+    }).then(audioBuffer => {
+      if (!audioBuffer) return null;
+      const ch = audioBuffer.getChannelData(0);
+      let pico = 0, soma = 0, n = 0;
+      for (let i = 0; i < ch.length; i++) {
+        const a = Math.abs(ch[i]);
+        if (a > pico) pico = a;
+        if (a > 0.01) { soma += ch[i] * ch[i]; n++; }
+      }
+      const db = v => Math.round(20 * Math.log10(Math.max(v, 1e-9)) * 10) / 10;
+      return { picoDb: db(pico), rmsDb: db(n ? Math.sqrt(soma / n) : 0), duracao: Math.round(audioBuffer.duration * 10) / 10 };
+    }).catch(() => null);
+  }
+
+  // publica o resultado da última fala pra quem olha o /monitor de longe. Sem nome de
+  // paciente: só sala, fonte da voz, tempos e níveis.
+  const statusRef = db.ref(DB.tvStatus);
+  function registrarStatus(dados) {
+    if (!ativaFalando) return;
+    statusRef.set(Object.assign({ ts: firebase.database.ServerValue.TIMESTAMP, mudo: mudo, ganho: GANHO_VOZ_DB }, dados)).catch(() => {});
+  }
+
   // texto pra FALA (a tela continua em maiúsculas): nome todo em maiúsculas o TTS lê
   // como sigla, soletrando; "01" vira "zero um". Ajusta só o que vai pra voz.
   function paraFala(texto) {
@@ -1178,7 +1324,7 @@ function iniciarRecepcao() {
     // (src/worker.js). Baixa com fetch primeiro pra saber O MOTIVO se falhar (cota,
     // chave, API) e só então toca via <audio>; qualquer falha cai na voz do navegador.
     function tocarTts(aoFalhar) {
-      const url = '/tts?q=' + encodeURIComponent(texto.slice(0, 200));
+      const url = urlTts(texto, GANHO_VOZ_DB);
       const t0 = Date.now();
       fetch(url).then(res => {
         if (!res.ok) return res.text().then(msg => { throw new Error(res.status + ' ' + msg.slice(0, 200)); });
@@ -1189,22 +1335,31 @@ function iniciarRecepcao() {
         if (concluido) return;
         const audio = new Audio(URL.createObjectURL(blob));
         audioAtual = audio;
+        const msAteTocar = Date.now() - t0;
         audio.onended = () => {
           diag('terminou em ' + (Date.now() - t0) + 'ms (duração=' + audio.duration.toFixed(1) + 's)');
           URL.revokeObjectURL(audio.src);
           finalizar();
+          // relatório pro /monitor, medido SÓ AGORA, depois da fala, fora do caminho do som
+          medirNivel(blob).then(n => registrarStatus(Object.assign({
+            tipo: 'chamado', fonte: 'tts', sala: salaAtualNoAr, ms: msAteTocar, liberou: comoLiberou
+          }, n || {})));
         };
         audio.onerror = () => { URL.revokeObjectURL(audio.src); aoFalhar('áudio do /tts não tocou'); };
         audio.play()
           .then(() => diag('tocando /tts (Orus) após ' + (Date.now() - t0) + 'ms (som liberado: ' + comoLiberou + ')'))
           .catch(err => aoFalhar('play() do áudio falhou: ' + (err && err.name ? err.name : err)));
-      }).catch(err => aoFalhar('/tts falhou: ' + err.message));
+      }).catch(err => {
+        registrarStatus({ tipo: 'chamado', fonte: 'tts', sala: salaAtualNoAr, erro: String(err.message).slice(0, 120) });
+        aoFalhar('/tts falhou: ' + err.message);
+      });
     }
 
     // principal: /tts (Google Orus); reserva: voz do navegador; se ambas falharem, libera a trava
     tocarTts(motivo => {
       if (concluido) return;
       diag(motivo + ' — usando a voz do navegador');
+      registrarStatus({ tipo: 'chamado', fonte: 'navegador', sala: salaAtualNoAr, erro: motivo.slice(0, 120) });
       falarComNavegador(texto, finalizar, motivo2 => {
         diag(motivo2 + ' — sem voz nenhuma neste chamado');
         finalizar();
@@ -1212,10 +1367,93 @@ function iniciarRecepcao() {
     });
   }
 
+  function renderFila() {
+    const n = filaChamados.length;
+    filaAvisoEl.textContent = n ? '  ·  ' + n + ' na fila' : '';
+  }
+
+  // TESTE DE SOM À DISTÂNCIA: o /monitor grava um pedido em painel/teste_som e a TV
+  // ativa toca uma frase curta, mede o nível e devolve o resultado em painel/tv_status.
+  // Não mexe no card do paciente, no histórico, na fila nem na trava das salas.
+  let ultimoTeste = 0;
+  let primeiraLeituraTeste = true;
+  db.ref(DB.testeSom).on('value', snap => {
+    const p = snap.val();
+    if (primeiraLeituraTeste) {
+      // o que já estava no banco quando a TV abriu (ou recarregou num deploy) não é
+      // um pedido novo: só anota, senão o último teste tocaria de novo na recepção
+      primeiraLeituraTeste = false;
+      if (p && p.pedido) ultimoTeste = p.pedido;
+      return;
+    }
+    if (!p || !p.pedido || p.pedido <= ultimoTeste) return;
+    ultimoTeste = p.pedido;
+    if (!ativaFalando) return; // espelho não responde; só a TV que fala
+    if (agoraServidor() - p.pedido > 120000) return; // pedido velho: ignora
+    const silencioso = !!p.silencioso;
+    if (!silencioso && processando) { registrarStatus({ tipo: 'teste', erro: 'TV ocupada anunciando um chamado' }); return; }
+    if (!silencioso && mudo) { registrarStatus({ tipo: 'teste', erro: 'TV está no mudo (botão Silenciar voz)' }); return; }
+    tocarTeste(Number(p.ganho) || 0, silencioso);
+  });
+  // silencioso = toca com volume zero: ninguém na recepção ouve, mas ainda dá pra saber
+  // se o /tts respondeu, qual o nível do áudio e se o navegador liberou tocar sozinho
+  function tocarTeste(ganho, silencioso) {
+    const texto = 'Teste de som do painel da recepção.';
+    const tipo = silencioso ? 'verificacao' : 'teste';
+    const t0 = Date.now();
+    diag('teste ' + (silencioso ? 'silencioso' : 'com som') + ' pedido de longe (ganho ' + ganho + ' dB)');
+
+    // Teste COM SOM reserva a fila JÁ, antes de buscar o áudio: um chamado que chegue
+    // enquanto o MP3 baixa espera e sai depois da frase, em vez de tocar por cima.
+    // O silencioso não reserva nada: não sai som, então nada se sobrepõe.
+    let liberou = silencioso;
+    let soltaPorTempo = null;
+    function liberarFila() {
+      if (liberou) return;
+      liberou = true;
+      clearTimeout(soltaPorTempo);
+      if (finalizarFalaAtual === liberarFila) finalizarFalaAtual = null;
+      processando = false;
+      processarFila();
+    }
+    if (!silencioso) {
+      processando = true;
+      finalizarFalaAtual = liberarFila;             // botão "Silenciar voz" corta e solta a fila
+      soltaPorTempo = setTimeout(liberarFila, 15000); // rede travada: não segura a fila pra sempre
+    }
+
+    fetch(urlTts(texto, ganho)).then(res => {
+      if (!res.ok) return res.text().then(m => { throw new Error(res.status + ' ' + m.slice(0, 120)); });
+      return res.blob();
+    }).then(blob => {
+      if (!silencioso && liberou) return; // já foi cortado (mudo/tempo) enquanto baixava
+      const audio = new Audio(URL.createObjectURL(blob));
+      if (silencioso) { audio.muted = true; audio.volume = 0; } // dois cintos: nenhum navegador deixa sair som
+      else audioAtual = audio;
+      audio.onended = () => { URL.revokeObjectURL(audio.src); liberarFila(); };
+      audio.onerror = () => liberarFila();
+      audio.play().then(() => {
+        if (silencioso) setTimeout(() => { try { audio.pause(); } catch (e) {} }, 300);
+        // mede só depois, fora do caminho do som
+        medirNivel(blob).then(n => registrarStatus(Object.assign(
+          { tipo: tipo, fonte: 'tts', ganhoTeste: ganho, ms: Date.now() - t0, liberou: comoLiberou }, n || {})));
+      }).catch(err => {
+        liberarFila();
+        registrarStatus({ tipo: tipo, fonte: 'tts', ganhoTeste: ganho, erro: 'play() ' + (err && err.name ? err.name : err) });
+      });
+    }).catch(err => {
+      liberarFila();
+      registrarStatus({ tipo: tipo, ganhoTeste: ganho, erro: String(err.message).slice(0, 120) });
+    });
+  }
+
   function processarFila() {
+    renderFila();
     if (processando || filaChamados.length === 0) return;
     processando = true;
     const chamado = filaChamados.shift();
+    renderFila();
+    marcarNoAr(chamado);
 
     chamandoNomeEl.textContent = chamado.nome;
     chamandoNomeEl.classList.remove('empty');
@@ -1229,6 +1467,7 @@ function iniciarRecepcao() {
 
     anunciar(chamado, REPETICOES_CHAMADO, () => {
       processando = false;
+      limparNoAr();
       processarFila();
     });
   }
@@ -1258,9 +1497,14 @@ function iniciarRecepcao() {
     if (!val || !val.nome || !val.sala) return;
     filaChamados.push({ key: snap.key, ...val });
     processarFila();
+    renderFila();
   }
   // limpeza das 18h (Worker apaga tudo em chamadas/): tira da tela também
   function chamadoApagado(snap) {
+    // limpeza (18h ou botão): quem ainda não foi anunciado sai da fila
+    const naFila = filaChamados.length;
+    filaChamados = filaChamados.filter(c => c.key !== snap.key);
+    if (filaChamados.length !== naFila) renderFila();
     const antes = historico.length;
     historico = historico.filter(h => h.key !== snap.key);
     if (historico.length !== antes) renderHistorico();
@@ -1286,7 +1530,8 @@ function iniciarRecepcao() {
   btnRepetir.onclick = () => {
     if (!ultimoChamado || processando) return;
     processando = true;
-    anunciar(ultimoChamado, 1, () => { processando = false; processarFila(); });
+    marcarNoAr(ultimoChamado);
+    anunciar(ultimoChamado, 1, () => { processando = false; limparNoAr(); processarFila(); });
   };
 
   document.getElementById('limparRecepcao').onclick = limparChamados;
@@ -1348,11 +1593,16 @@ function iniciarMonitor() {
   db.ref(DB.tvUltimoSinal).on('value', snap => { tvUltimo = snap.val(); renderTv(); });
   setInterval(renderTv, 1000);
 
-  db.ref(DB.falando).on('value', snap => {
-    const f = !!snap.val();
-    falandoEl.textContent = f ? 'Sim, anunciando' : 'Não';
-    falandoEl.className = 'v ' + (f ? 'mon-ok' : '');
-  });
+  let falandoTv = false;
+  let noAr = null;
+  function renderFalando() {
+    falandoEl.textContent = falandoTv
+      ? (noAr ? noAr.nome + ' · ' + noAr.sala : 'Sim, anunciando')
+      : 'Não';
+    falandoEl.className = 'v ' + (falandoTv ? 'mon-ok' : '');
+  }
+  db.ref(DB.falando).on('value', snap => { falandoTv = !!snap.val(); renderFalando(); });
+  db.ref(DB.anunciando).on('value', snap => { noAr = snap.val(); renderFalando(); });
 
   const limpezaEl = document.getElementById('monLimpeza');
   db.ref(DB.limpeza).on('value', snap => {
@@ -1362,6 +1612,51 @@ function iniciarMonitor() {
     const quando = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     const tipo = l.tipo === 'automatica' ? 'automática (18h)' : 'manual' + (l.origem ? ' pela tela ' + l.origem : '');
     limpezaEl.textContent = quando + ' · ' + tipo;
+  });
+
+  // áudio da TV: último relatório publicado por ela (ver registrarStatus)
+  const audioEl2 = document.getElementById('monAudio');
+  const audioSubEl = document.getElementById('monAudioSub');
+  db.ref(DB.tvStatus).on('value', snap => {
+    const st = snap.val();
+    if (!st) { audioEl2.textContent = 'Sem relatório ainda'; audioEl2.className = 'v dim'; audioSubEl.textContent = ''; return; }
+    const quando = st.ts ? dataHora(st.ts) : '?';
+    if (st.erro) {
+      // caiu na voz do navegador (o /tts falhou) ou nem tocou
+      audioEl2.textContent = st.fonte === 'navegador' ? 'voz do navegador (mais baixa)' : 'Falhou';
+      audioEl2.className = 'v mon-bad';
+      const rotuloErro = st.tipo === 'teste' ? 'Teste com som'
+        : st.tipo === 'verificacao' ? 'Verificação silenciosa'
+        : 'Chamado' + (st.sala ? ' · ' + st.sala : '');
+      audioSubEl.textContent = rotuloErro + ' de ' + quando + ': ' + st.erro;
+      return;
+    }
+    const voz = st.fonte === 'tts' ? 'voz Google (Orus)' : 'voz do navegador';
+    audioEl2.textContent = voz;
+    audioEl2.className = 'v ' + (st.fonte === 'tts' ? 'mon-ok' : 'mon-bad');
+    const rotulo = st.tipo === 'teste' ? 'Teste com som'
+      : st.tipo === 'verificacao' ? 'Verificação silenciosa'
+      : 'Chamado' + (st.sala ? ' · ' + st.sala : '');
+    const partes = [rotulo + ' às ' + quando];
+    if (st.picoDb !== undefined) partes.push('pico ' + st.picoDb + ' dB, média ' + st.rmsDb + ' dB');
+    if (st.duracao) partes.push(st.duracao + 's');
+    const g = st.tipo === 'chamado' ? st.ganho : st.ganhoTeste;
+    if (g) partes.push('ganho +' + g + ' dB');
+    if (st.mudo) partes.push('TV NO MUDO');
+    audioSubEl.textContent = partes.join(' · ');
+  });
+  document.querySelectorAll('.mon-btn').forEach(btn => {
+    btn.onclick = () => {
+      const ganho = Number(btn.dataset.ganho) || 0;
+      const silencioso = btn.dataset.silencioso === '1';
+      // os pacientes ouvem: confirma antes, pra ninguém disparar som por engano
+      if (!silencioso && !confirm('Isso vai tocar uma frase de teste no alto-falante da recepção, e os pacientes vão ouvir. Continuar?')) return;
+      document.querySelectorAll('.mon-btn').forEach(b => { b.disabled = true; });
+      setTimeout(() => document.querySelectorAll('.mon-btn').forEach(b => { b.disabled = false; }), 6000);
+      document.getElementById('monTesteSub').textContent = 'Pedido enviado, aguarde o resultado...';
+      db.ref(DB.testeSom).set({ pedido: firebase.database.ServerValue.TIMESTAMP, ganho: ganho, silencioso: silencioso })
+        .catch(err => { document.getElementById('monTesteSub').textContent = 'Não consegui pedir: ' + err.message; });
+    };
   });
 
   let salas = {};

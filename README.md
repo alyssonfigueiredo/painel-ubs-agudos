@@ -30,9 +30,29 @@ Tecla `D` na TV mostra/esconde o diagnóstico; no console, `painelLog()` lista o
 
 ## Consultórios
 
-Digitar o nome, Enter ou "Chamar". A TV anuncia 2x. Enquanto a TV fala, o botão fica
-"Aguarde...". Mesma sala aberta em dois PCs: a segunda fica bloqueada até alguém clicar
+Digitar o nome, Enter ou "Chamar". A TV anuncia 2x. Pode chamar mesmo com a TV
+anunciando o paciente de outra sala: os chamados entram numa fila e são anunciados em
+sequência (a TV mostra "N na fila"). A própria sala fica travada do envio até a TV
+terminar de anunciar o chamado dela: o botão mostra "Na fila..." e depois
+"Anunciando...". Na prática são poucos segundos: solta assim que a TV termina o
+anúncio. Se nenhuma TV estiver ativa, solta em 5s; se a TV estiver aberta mas parar de
+responder, em 25s.
+Mesma sala aberta em dois PCs: a segunda fica bloqueada até alguém clicar
 "Assumir nesta tela".
+
+## Diagnóstico de som à distância
+
+O `/monitor` mostra um card "Áudio da TV" com o que aconteceu na última fala: se saiu pela
+voz Google (Orus) ou caiu na voz do navegador, o nível medido do áudio (pico e média),
+a duração e o erro, quando houver. Nenhum nome de paciente vai para esse relatório.
+
+Os botões "Testar som" tocam uma frase curta na recepção e devolvem o nível medido, com
+ganho de 0, 6 ou 10 dB. Servem para decidir o volume sem ninguém mexer na TV. Se o pico
+medido estiver perto de 0 dB, o áudio já vai no máximo e o volume baixo é do equipamento
+(mixer por aplicativo do Windows, modo de som da TV, saída HDMI).
+
+Para mudar o volume de vez, a rota `/tts` aceita `&g=<dB>` (até 16) e a TV usa a constante
+`GANHO_VOZ_DB` no index.html.
 
 ## Privacidade
 

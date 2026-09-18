@@ -10,6 +10,11 @@ const TTS_API = 'https://texttospeech.googleapis.com/v1beta1/text:synthesize';
 const TTS_LANG = 'pt-BR';
 const TTS_VOZ = 'pt-BR-Chirp3-HD-Orus';
 const TTS_MAX_CHARS = 200;
+// ganho de volume na GERAÇÃO do áudio (dB). A Google aceita de -96 a +16; acima de +10
+// começa a distorcer. Aumentar aqui é melhor que amplificar no navegador: o MP3 já sai
+// mais alto e a TV continua tocando com <audio> puro, sem mexer no caminho do som.
+const TTS_GANHO_PADRAO = 0;
+const TTS_GANHO_MAX = 16;
 const TTS_CACHE_SECONDS = 60 * 60 * 24 * 30;
 
 // LIMPEZA: todo dia às 18h (horário de Brasília) apaga TODOS os chamados do banco —
@@ -52,12 +57,16 @@ function erro(status, msg) {
 async function tts(url, env, ctx) {
   const texto = (url.searchParams.get('q') || '').trim().slice(0, TTS_MAX_CHARS);
   if (!texto) return erro(400, 'faltou q');
+  // g = ganho em dB, pra testar volume sem tocar no resto (ex.: /tts?q=oi&g=6)
+  const pedido = parseFloat(url.searchParams.get('g'));
+  const ganho = Number.isFinite(pedido) ? Math.max(-96, Math.min(TTS_GANHO_MAX, pedido)) : TTS_GANHO_PADRAO;
   // trim: colar a chave no terminal costuma trazer quebra de linha/espaço no fim
   const chaveApi = (env.GOOGLE_TTS_KEY || '').trim();
   if (!chaveApi) return erro(503, 'GOOGLE_TTS_KEY não configurada (npx wrangler secret put GOOGLE_TTS_KEY)');
 
   const cache = caches.default;
-  const chave = new Request('https://tts.painel-ubs.local/' + TTS_VOZ + '/' + encodeURIComponent(texto));
+  // o ganho entra na chave do cache: sem isso, pedir outro volume devolveria o antigo
+  const chave = new Request('https://tts.painel-ubs.local/' + TTS_VOZ + '/g' + ganho + '/' + encodeURIComponent(texto));
   const emCache = await cache.match(chave);
   if (emCache) return emCache;
 
@@ -69,7 +78,7 @@ async function tts(url, env, ctx) {
       body: JSON.stringify({
         input: { text: texto },
         voice: { languageCode: TTS_LANG, name: TTS_VOZ },
-        audioConfig: { audioEncoding: 'MP3', speakingRate: 1.0 }
+        audioConfig: { audioEncoding: 'MP3', speakingRate: 1.0, volumeGainDb: ganho }
       })
     });
   } catch (e) {
