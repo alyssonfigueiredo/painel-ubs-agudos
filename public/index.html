@@ -1333,15 +1333,17 @@ function iniciarRecepcao() {
         return res.blob();
       }).then(blob => {
         if (concluido) return;
-        medirNivel(blob).then(n => registrarStatus(Object.assign({
-          tipo: 'chamado', fonte: 'tts', sala: salaAtualNoAr, ms: Date.now() - t0, liberou: comoLiberou
-        }, n || {})));
         const audio = new Audio(URL.createObjectURL(blob));
         audioAtual = audio;
+        const msAteTocar = Date.now() - t0;
         audio.onended = () => {
           diag('terminou em ' + (Date.now() - t0) + 'ms (duração=' + audio.duration.toFixed(1) + 's)');
           URL.revokeObjectURL(audio.src);
           finalizar();
+          // relatório pro /monitor, medido SÓ AGORA, depois da fala, fora do caminho do som
+          medirNivel(blob).then(n => registrarStatus(Object.assign({
+            tipo: 'chamado', fonte: 'tts', sala: salaAtualNoAr, ms: msAteTocar, liberou: comoLiberou
+          }, n || {})));
         };
         audio.onerror = () => { URL.revokeObjectURL(audio.src); aoFalhar('áudio do /tts não tocou'); };
         audio.play()
@@ -1374,52 +1376,75 @@ function iniciarRecepcao() {
   // ativa toca uma frase curta, mede o nível e devolve o resultado em painel/tv_status.
   // Não mexe no card do paciente, no histórico, na fila nem na trava das salas.
   let ultimoTeste = 0;
+  let primeiraLeituraTeste = true;
   db.ref(DB.testeSom).on('value', snap => {
     const p = snap.val();
-    if (!ativaFalando || !p || !p.pedido) return;
-    if (p.pedido <= ultimoTeste) return;
+    if (primeiraLeituraTeste) {
+      // o que já estava no banco quando a TV abriu (ou recarregou num deploy) não é
+      // um pedido novo: só anota, senão o último teste tocaria de novo na recepção
+      primeiraLeituraTeste = false;
+      if (p && p.pedido) ultimoTeste = p.pedido;
+      return;
+    }
+    if (!p || !p.pedido || p.pedido <= ultimoTeste) return;
     ultimoTeste = p.pedido;
+    if (!ativaFalando) return; // espelho não responde; só a TV que fala
     if (agoraServidor() - p.pedido > 120000) return; // pedido velho: ignora
-    if (processando) { registrarStatus({ tipo: 'teste', erro: 'TV ocupada anunciando um chamado' }); return; }
-    tocarTeste(Number(p.ganho) || 0, !!p.silencioso);
+    const silencioso = !!p.silencioso;
+    if (!silencioso && processando) { registrarStatus({ tipo: 'teste', erro: 'TV ocupada anunciando um chamado' }); return; }
+    if (!silencioso && mudo) { registrarStatus({ tipo: 'teste', erro: 'TV está no mudo (botão Silenciar voz)' }); return; }
+    tocarTeste(Number(p.ganho) || 0, silencioso);
   });
   // silencioso = toca com volume zero: ninguém na recepção ouve, mas ainda dá pra saber
   // se o /tts respondeu, qual o nível do áudio e se o navegador liberou tocar sozinho
   function tocarTeste(ganho, silencioso) {
     const texto = 'Teste de som do painel da recepção.';
+    const tipo = silencioso ? 'verificacao' : 'teste';
     const t0 = Date.now();
     diag('teste ' + (silencioso ? 'silencioso' : 'com som') + ' pedido de longe (ganho ' + ganho + ' dB)');
+
+    // Teste COM SOM reserva a fila JÁ, antes de buscar o áudio: um chamado que chegue
+    // enquanto o MP3 baixa espera e sai depois da frase, em vez de tocar por cima.
+    // O silencioso não reserva nada: não sai som, então nada se sobrepõe.
+    let liberou = silencioso;
+    let soltaPorTempo = null;
+    function liberarFila() {
+      if (liberou) return;
+      liberou = true;
+      clearTimeout(soltaPorTempo);
+      if (finalizarFalaAtual === liberarFila) finalizarFalaAtual = null;
+      processando = false;
+      processarFila();
+    }
+    if (!silencioso) {
+      processando = true;
+      finalizarFalaAtual = liberarFila;             // botão "Silenciar voz" corta e solta a fila
+      soltaPorTempo = setTimeout(liberarFila, 15000); // rede travada: não segura a fila pra sempre
+    }
+
     fetch(urlTts(texto, ganho)).then(res => {
       if (!res.ok) return res.text().then(m => { throw new Error(res.status + ' ' + m.slice(0, 120)); });
       return res.blob();
     }).then(blob => {
-      medirNivel(blob).then(n => {
-        const tipo = silencioso ? 'verificacao' : 'teste';
-        const audio = new Audio(URL.createObjectURL(blob));
-        if (silencioso) audio.volume = 0;
-        // teste COM SOM: segura a fila enquanto a frase toca, senão um chamado que
-        // chegasse no meio sairia falando por cima. Chamados esperam ~2s e entram
-        // normalmente depois. O silencioso não precisa: não sai som.
-        let liberou = silencioso;
-        function liberarFila() {
-          if (liberou) return;
-          liberou = true;
-          processando = false;
-          processarFila();
-        }
-        if (!silencioso) processando = true;
-        audio.onended = () => { URL.revokeObjectURL(audio.src); liberarFila(); };
-        audio.onerror = () => liberarFila();
-        audio.play().then(() => {
-          if (silencioso) setTimeout(() => { try { audio.pause(); } catch (e) {} }, 300);
-          else setTimeout(liberarFila, 15000); // rede travada: não segura a fila pra sempre
-          registrarStatus(Object.assign({ tipo: tipo, fonte: 'tts', ganhoTeste: ganho, ms: Date.now() - t0, liberou: comoLiberou }, n || {}));
-        }).catch(err => {
-          liberarFila();
-          registrarStatus({ tipo: tipo, fonte: 'tts', ganhoTeste: ganho, erro: 'play() ' + (err && err.name ? err.name : err) });
-        });
+      if (!silencioso && liberou) return; // já foi cortado (mudo/tempo) enquanto baixava
+      const audio = new Audio(URL.createObjectURL(blob));
+      if (silencioso) { audio.muted = true; audio.volume = 0; } // dois cintos: nenhum navegador deixa sair som
+      else audioAtual = audio;
+      audio.onended = () => { URL.revokeObjectURL(audio.src); liberarFila(); };
+      audio.onerror = () => liberarFila();
+      audio.play().then(() => {
+        if (silencioso) setTimeout(() => { try { audio.pause(); } catch (e) {} }, 300);
+        // mede só depois, fora do caminho do som
+        medirNivel(blob).then(n => registrarStatus(Object.assign(
+          { tipo: tipo, fonte: 'tts', ganhoTeste: ganho, ms: Date.now() - t0, liberou: comoLiberou }, n || {})));
+      }).catch(err => {
+        liberarFila();
+        registrarStatus({ tipo: tipo, fonte: 'tts', ganhoTeste: ganho, erro: 'play() ' + (err && err.name ? err.name : err) });
       });
-    }).catch(err => registrarStatus({ tipo: silencioso ? 'verificacao' : 'teste', ganhoTeste: ganho, erro: String(err.message).slice(0, 120) }));
+    }).catch(err => {
+      liberarFila();
+      registrarStatus({ tipo: tipo, ganhoTeste: ganho, erro: String(err.message).slice(0, 120) });
+    });
   }
 
   function processarFila() {
