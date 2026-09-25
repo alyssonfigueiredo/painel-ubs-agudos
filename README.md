@@ -11,6 +11,7 @@ Site: `https://painel-ubs.soaperando.com.br`
 | Consultórios | `/01` `/02` `/03` `/04` |
 | Outras salas | `/odontologia` `/nutricao` `/enfermagem` `/triagem` `/vacina` `/medicacao` |
 | Monitor (só leitura, para acompanhar de fora sem mexer na TV) | `/monitor` |
+| Histórico do dia, com filtro por sala (só leitura) | `/historico` |
 
 Abrir o endereço da sala já entra nela sem clicar. F5 mantém a sala; uma aba nova cai na escolha.
 
@@ -39,6 +40,17 @@ anúncio. Se nenhuma TV estiver ativa, solta em 5s; se a TV estiver aberta mas p
 responder, em 25s.
 Mesma sala aberta em dois PCs: a segunda fica bloqueada até alguém clicar
 "Assumir nesta tela".
+
+## Histórico do dia
+
+`/historico` lista tudo que foi chamado hoje, do mais recente para o mais antigo, com
+hora, nome e sala. Os chips filtram por sala e mostram quantos chamados cada uma teve;
+"Copiar lista" copia o que está filtrado em ordem cronológica. Só leitura: não grava
+nada, não entra na trava de papel e não interfere na TV. O monitor tem um botão que leva
+até lá e o histórico tem um de volta.
+
+Como o banco guarda apenas o dia, a lista esvazia às 18h e quando alguém usa
+"Limpar chamados".
 
 ## Diagnóstico de som à distância
 

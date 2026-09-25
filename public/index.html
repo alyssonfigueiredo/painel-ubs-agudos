@@ -295,6 +295,29 @@
   .mon-btn:hover { border-color: var(--coral); }
   .mon-btn:disabled { opacity: .4; cursor: default; }
 
+  /* ---------- histórico do dia (só leitura) ---------- */
+  .hist-topo { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+  .hist-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .chip {
+    background: transparent; color: var(--text-dim);
+    border: 1px solid var(--line); padding: 9px 14px;
+    font-weight: 600; font-size: 14px; border-radius: 999px;
+    cursor: pointer; font-family: inherit;
+  }
+  .chip:hover { border-color: var(--coral); color: var(--text); }
+  .chip.ativo { background: var(--coral); color: #21140f; border-color: transparent; }
+  .chip .n { opacity: .65; margin-left: 6px; font-weight: 700; }
+  .hist-tabela { background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+  .hist-linha { display: flex; align-items: baseline; gap: 16px; padding: 14px 22px; border-bottom: 1px solid var(--line); }
+  .hist-linha:last-child { border-bottom: none; }
+  .hist-linha:nth-child(even) { background: rgba(255,255,255,0.02); }
+  .hist-linha .pos { color: var(--text-dim); font-size: 13px; min-width: 34px; }
+  .hist-linha .hora { font-weight: 700; font-size: 17px; min-width: 62px; }
+  .hist-linha .nome { font-weight: 600; font-size: 17px; flex: 1; word-break: break-word; }
+  .hist-linha .sala { color: var(--text-dim); font-size: 14px; text-align: right; }
+  .hist-vazio { padding: 28px 22px; color: var(--text-dim); text-align: center; }
+  .hist-resumo { color: var(--text-dim); font-size: 14px; margin-top: 14px; }
+
   .mudo-btn.mudo-ativo {
     background: #7a1f1f;
     border-color: #ff6b6b;
@@ -470,10 +493,42 @@
         <div class="mon-card">
           <div class="t">CHAMADOS DE HOJE (MAIS RECENTES)</div>
           <ul class="mon-lista" id="monHistorico"><li>Nenhum chamado ainda.</li></ul>
+          <div style="margin-top:14px"><button class="mon-btn" id="monVerHistorico">📋 Ver todos, com filtro por sala</button></div>
           <div class="mon-nota">Não dá pra saber daqui se o som saiu na TV; dá pra ver que o chamado chegou e que a TV o anunciou (Falando agora).</div>
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ============ HISTÓRICO DO DIA (só leitura, com filtro por sala) ============ -->
+<div id="view-historico" class="view">
+  <div class="page">
+    <header>
+      <div class="brand">
+        <div class="brasao"><img src="/img/brasao.png" alt="Brasão de Agudos do Sul" onerror="this.parentNode.remove()"></div>
+        <div>
+          <h1>UBS Francisca de Oliveira Silva</h1>
+          <div class="sub2">CHAMADOS DE HOJE · SÓ LEITURA</div>
+        </div>
+      </div>
+      <div class="clock">
+        <div class="time js-hora">--:--</div>
+        <div class="date js-data"></div>
+      </div>
+    </header>
+    <div class="hist-topo">
+      <div class="side-title" id="histTitulo">TODAS AS SALAS</div>
+      <div>
+        <button class="mon-btn" id="histCopiar">📋 Copiar lista</button>
+        <button class="mon-btn" id="histMonitor">📺 Ver o monitor</button>
+      </div>
+    </div>
+    <div class="hist-chips" id="histChips"></div>
+    <div class="hist-tabela" id="histLista">
+      <div class="hist-vazio">Carregando...</div>
+    </div>
+    <div class="hist-resumo" id="histResumo"></div>
   </div>
 </div>
 
@@ -565,7 +620,8 @@ const views = {
   picker: document.getElementById('view-picker'),
   caller: document.getElementById('view-caller'),
   recepcao: document.getElementById('view-recepcao'),
-  monitor: document.getElementById('view-monitor')
+  monitor: document.getElementById('view-monitor'),
+  historico: document.getElementById('view-historico')
 };
 
 function mostrarView(nome) {
@@ -605,6 +661,7 @@ function papelDaUrl() {
   const alvo = slug(q);
   if (alvo === 'recepcao') return 'recepcao';
   if (alvo === 'monitor') return 'monitor';
+  if (alvo === 'historico') return 'historico';
   if (ATALHO_URL[alvo]) return ATALHO_URL[alvo];
   return SALAS.find(sala => slug(sala) === alvo) || null;
 }
@@ -618,8 +675,13 @@ function init() {
   } catch (e) {}
   const daUrl = papelDaUrl();
   const papel = daUrl || papelSalvo(); // 'recepcao' ou nome de uma sala
-  if (daUrl && daUrl !== 'monitor') guardarPapel(daUrl);
-  if (papel === 'monitor') {
+  // monitor e histórico são telas de consulta: não viram o papel da aba
+  if (daUrl && daUrl !== 'monitor' && daUrl !== 'historico') guardarPapel(daUrl);
+  if (papel === 'historico') {
+    definirTitulo('Histórico de hoje');
+    mostrarView('historico');
+    iniciarHistorico();
+  } else if (papel === 'monitor') {
     definirTitulo('Monitor');
     mostrarView('monitor');
     iniciarMonitor();
@@ -1541,6 +1603,94 @@ function iniciarRecepcao() {
   };
 }
 
+// ---------------- histórico do dia: só leitura ----------------
+// /historico — lista tudo que foi chamado hoje, com filtro por sala. Não grava nada,
+// não entra na trava de papel e não interfere na TV. O banco guarda só o dia: às 18h
+// (ou no botão "Limpar chamados") tudo é apagado e esta tela esvazia junto.
+function iniciarHistorico() {
+  const chipsEl = document.getElementById('histChips');
+  const listaEl = document.getElementById('histLista');
+  const tituloEl = document.getElementById('histTitulo');
+  const resumoEl = document.getElementById('histResumo');
+  const MAX_HIST = 500;
+  let chamados = [];      // mais recente primeiro
+  let filtro = '';        // '' = todas as salas
+
+  const hora = ts => ts ? new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+  const doFiltro = () => filtro ? chamados.filter(c => c.sala === filtro) : chamados;
+
+  function renderChips() {
+    const contagem = {};
+    chamados.forEach(c => { contagem[c.sala] = (contagem[c.sala] || 0) + 1; });
+    // todas as salas primeiro, na ordem do painel; depois qualquer sala antiga que ainda apareça
+    const nomes = SALAS.concat(Object.keys(contagem).filter(n => !SALAS.includes(n)).sort());
+    const chip = (rotulo, valor, n) =>
+      '<button class="chip' + (filtro === valor ? ' ativo' : '') + '" data-sala="' + escapeHtml(valor) + '">' +
+      escapeHtml(rotulo) + (n ? '<span class="n">' + n + '</span>' : '') + '</button>';
+    chipsEl.innerHTML = chip('Todas', '', chamados.length) +
+      nomes.map(n => chip(n, n, contagem[n] || 0)).join('');
+    chipsEl.querySelectorAll('.chip').forEach(b => {
+      b.onclick = () => { filtro = b.dataset.sala; render(); };
+    });
+  }
+
+  function render() {
+    const itens = doFiltro();
+    tituloEl.textContent = (filtro || 'TODAS AS SALAS').toUpperCase();
+    listaEl.innerHTML = itens.length
+      ? itens.map((c, i) =>
+          '<div class="hist-linha">' +
+            '<span class="pos">' + (itens.length - i) + '</span>' +
+            '<span class="hora">' + hora(c.ts) + '</span>' +
+            '<span class="nome">' + escapeHtml(c.nome) + '</span>' +
+            (filtro ? '' : '<span class="sala">' + escapeHtml(c.sala) + '</span>') +
+          '</div>').join('')
+      : '<div class="hist-vazio">' + (chamados.length
+          ? 'Nenhum chamado em ' + escapeHtml(filtro) + ' hoje.'
+          : 'Nenhum chamado hoje ainda. O histórico é apagado todo dia às 18h.') + '</div>';
+    const primeiro = itens.length ? itens[itens.length - 1] : null;
+    const ultimo = itens.length ? itens[0] : null;
+    resumoEl.textContent = itens.length
+      ? itens.length + (itens.length > 1 ? ' chamados' : ' chamado') +
+        ' · do primeiro às ' + hora(primeiro.ts) + ' ao último às ' + hora(ultimo.ts)
+      : '';
+    renderChips();
+  }
+
+  document.getElementById('histCopiar').onclick = () => {
+    const itens = doFiltro();
+    const texto = itens.slice().reverse()
+      .map((c, i) => (i + 1) + '. ' + hora(c.ts) + '  ' + c.nome + (filtro ? '' : '  (' + c.sala + ')'))
+      .join('\n');
+    const cabecalho = (filtro || 'Todas as salas') + ' — ' + new Date().toLocaleDateString('pt-BR') +
+      ' (' + itens.length + ')\n';
+    const botao = document.getElementById('histCopiar');
+    const aviso = txt => { botao.textContent = txt; setTimeout(() => { botao.textContent = '📋 Copiar lista'; }, 2000); };
+    if (!itens.length) { aviso('nada para copiar'); return; }
+    const tudo = cabecalho + texto;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(tudo).then(() => aviso('✅ copiado'), () => aviso('não deu; use Ctrl+C'));
+    } else aviso('navegador não deixou copiar');
+  };
+  document.getElementById('histMonitor').onclick = () => { location.href = '/monitor'; };
+
+  const ref = db.ref(DB.chamadas).orderByChild('ts').limitToLast(MAX_HIST);
+  ref.on('child_added', snap => {
+    const val = snap.val();
+    if (!val || !val.nome) return;
+    chamados.push({ key: snap.key, nome: val.nome, sala: val.sala || '', ts: val.ts || 0 });
+    chamados.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    render();
+  });
+  ref.on('child_removed', snap => {
+    const antes = chamados.length;
+    chamados = chamados.filter(c => c.key !== snap.key);
+    if (chamados.length !== antes) render();
+  });
+
+  vigiarVersao(() => true);
+}
+
 // ---------------- monitor: só leitura ----------------
 // /monitor — pra conferir de fora se a TV está de pé, sem abrir uma recepção (que viraria
 // espelho e cobriria a tela com o aviso). Só escuta o banco; não grava, não fala, não trava.
@@ -1645,14 +1795,16 @@ function iniciarMonitor() {
     if (st.mudo) partes.push('TV NO MUDO');
     audioSubEl.textContent = partes.join(' · ');
   });
-  document.querySelectorAll('.mon-btn').forEach(btn => {
+  document.getElementById('monVerHistorico').onclick = () => { location.href = '/historico'; };
+  document.querySelectorAll('.mon-card .mon-btn[data-ganho]').forEach(btn => {
     btn.onclick = () => {
       const ganho = Number(btn.dataset.ganho) || 0;
       const silencioso = btn.dataset.silencioso === '1';
       // os pacientes ouvem: confirma antes, pra ninguém disparar som por engano
       if (!silencioso && !confirm('Isso vai tocar uma frase de teste no alto-falante da recepção, e os pacientes vão ouvir. Continuar?')) return;
-      document.querySelectorAll('.mon-btn').forEach(b => { b.disabled = true; });
-      setTimeout(() => document.querySelectorAll('.mon-btn').forEach(b => { b.disabled = false; }), 6000);
+      const botoes = document.querySelectorAll('.mon-btn[data-ganho]');
+      botoes.forEach(b => { b.disabled = true; });
+      setTimeout(() => botoes.forEach(b => { b.disabled = false; }), 6000);
       document.getElementById('monTesteSub').textContent = 'Pedido enviado, aguarde o resultado...';
       db.ref(DB.testeSom).set({ pedido: firebase.database.ServerValue.TIMESTAMP, ganho: ganho, silencioso: silencioso })
         .catch(err => { document.getElementById('monTesteSub').textContent = 'Não consegui pedir: ' + err.message; });
