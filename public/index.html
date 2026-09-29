@@ -1293,6 +1293,30 @@ function iniciarRecepcao() {
   // Toca o MP3 num elemento JÁ LIBERADO. Tenta o elemento da voz; se o navegador barrar
   // (NotAllowedError), usa o keepAlive, que está tocando o silêncio desde a liberação e
   // por isso não é barrado — e devolve o silêncio no fim. Devolve uma promessa.
+  // Recarga pedida pelo /monitor: espera a TV acabar de anunciar (e a fila esvaziar),
+  // pra não cortar a fala de um paciente no meio. Se a fila não andar, recarrega de
+  // qualquer jeito depois de 2 min — a tela pode estar justamente travada.
+  const ESPERA_RECARGA_MS = 120000;
+  let recargaPedida = false;
+  function recarregarQuandoPuder() {
+    if (recargaPedida) return;
+    recargaPedida = true;
+    const limite = Date.now() + ESPERA_RECARGA_MS;
+    diag('recarga pedida de longe pelo /monitor');
+    const tentar = () => {
+      const ocupada = processando || filaChamados.length > 0;
+      if (ocupada && Date.now() < limite) {
+        registrarStatus({ tipo: 'recarga', erro: 'esperando a TV terminar de anunciar (' + filaChamados.length + ' na fila)' });
+        setTimeout(tentar, 2000);
+        return;
+      }
+      if (ocupada) diag('recarga: a fila não andou em 2 min, recarregando mesmo assim');
+      registrarStatus({ tipo: 'recarga', fonte: 'monitor' });
+      setTimeout(() => location.reload(), 300);
+    };
+    tentar();
+  }
+
   // silencioso = corta o som ANTES do play, pra não vazar nem um pedacinho na recepção
   function tocarNoElemento(objectUrl, aoTerminar, aoFalhar, silencioso) {
     const kaEl = document.getElementById('keepAliveAudio');
@@ -1537,7 +1561,7 @@ function iniciarRecepcao() {
     ultimoTeste = p.pedido;
     if (!ativaFalando) return; // espelho não responde; só a TV que fala
     if (agoraServidor() - p.pedido > 120000) return; // pedido velho: ignora
-    if (p.acao === 'recarregar') { diag('recarga pedida de longe pelo /monitor'); setTimeout(() => location.reload(), 300); return; }
+    if (p.acao === 'recarregar') { recarregarQuandoPuder(); return; }
     const silencioso = !!p.silencioso;
     if (!silencioso && processando) { registrarStatus({ tipo: 'teste', erro: 'TV ocupada anunciando um chamado' }); return; }
     if (!silencioso && mudo) { registrarStatus({ tipo: 'teste', erro: 'TV está no mudo (botão Silenciar voz)' }); return; }
@@ -1884,6 +1908,7 @@ function iniciarMonitor() {
       audioEl2.className = 'v mon-bad';
       const rotuloErro = st.tipo === 'teste' ? 'Teste com som'
         : st.tipo === 'verificacao' ? 'Verificação silenciosa'
+        : st.tipo === 'recarga' ? 'Recarga da TV'
         : 'Chamado' + (st.sala ? ' · ' + st.sala : '');
       audioSubEl.textContent = rotuloErro + ' de ' + quando + ': ' + st.erro;
       if (st.ua) audioSubEl.textContent += '\n' + navegadorCurto(st.ua);
@@ -1894,6 +1919,7 @@ function iniciarMonitor() {
     audioEl2.className = 'v ' + (st.fonte === 'tts' ? 'mon-ok' : 'mon-bad');
     const rotulo = st.tipo === 'teste' ? 'Teste com som'
       : st.tipo === 'verificacao' ? 'Verificação silenciosa'
+      : st.tipo === 'recarga' ? 'Recarga da TV'
       : 'Chamado' + (st.sala ? ' · ' + st.sala : '');
     const partes = [rotulo + ' às ' + quando];
     if (st.picoDb !== undefined) partes.push('pico ' + st.picoDb + ' dB, média ' + st.rmsDb + ' dB');
@@ -1908,7 +1934,7 @@ function iniciarMonitor() {
   });
   document.getElementById('monVerHistorico').onclick = () => { location.href = '/historico'; };
   document.getElementById('monRecarregar').onclick = () => {
-    if (!confirm('Recarregar a tela da TV agora? A tela fica alguns segundos em branco e, dependendo do navegador, alguém pode precisar clicar uma vez nela pra liberar o som.')) return;
+    if (!confirm('Recarregar a tela da TV? Se ela estiver anunciando alguém, a recarga espera a fala terminar. Depois dela, dependendo do navegador, alguém pode precisar clicar uma vez na TV pra liberar o som.')) return;
     document.getElementById('monTesteSub').textContent = 'Pedido de recarga enviado.';
     db.ref(DB.testeSom).set({ pedido: firebase.database.ServerValue.TIMESTAMP, acao: 'recarregar' })
       .catch(err => { document.getElementById('monTesteSub').textContent = 'Não consegui pedir: ' + err.message; });
