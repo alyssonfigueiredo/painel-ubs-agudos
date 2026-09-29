@@ -63,8 +63,23 @@ ganho de 0, 6 ou 10 dB. Servem para decidir o volume sem ninguém mexer na TV. S
 medido estiver perto de 0 dB, o áudio já vai no máximo e o volume baixo é do equipamento
 (mixer por aplicativo do Windows, modo de som da TV, saída HDMI).
 
+O card mostra também o navegador da TV e se o som está liberado nela, e tem um botão
+"Recarregar a TV", útil se a tela travar. Recarregar não conserta o som barrado: depois
+dela pode ser preciso um clique na TV.
+
 Para mudar o volume de vez, a rota `/tts` aceita `&g=<dB>` (até 16) e a TV usa a constante
 `GANHO_VOZ_DB` no index.html.
+
+### Quando o relatório diz "voz do navegador" com play() barrado
+
+`NotAllowedError` significa que o navegador da TV recusou tocar o áudio. A voz da Google
+chegou, mas não pôde ser reproduzida, e a TV caiu na voz do navegador, que é mais baixa.
+A TV usa um único elemento de áudio, liberado no primeiro clique, e se ele for barrado usa
+o áudio de fundo, que já está tocando. Se as duas tentativas falharem, o aviso "Clique
+aqui para ativar o som" volta a aparecer na TV.
+
+Resolve com um clique na tela da TV, ou liberando Som (e Reprodução automática, no Edge)
+nas permissões do site, no cadeado ao lado do endereço.
 
 ## Privacidade
 
