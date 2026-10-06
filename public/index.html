@@ -2095,16 +2095,20 @@ function iniciarMonitor() {
   const dispositivosEl = document.getElementById('monDispositivos');
   const DISPOSITIVO_MAX_IDADE_MS = 14 * 24 * 60 * 60 * 1000; // esconde aparelho sumido há mais de 14 dias
   let dispositivos = {};
+  // a TV oficial da recepção é a única que roda Edge nessa UBS: ajuda a bater o olho
+  // e saber qual forçar, sem precisar ler o resto do user-agent
+  const ehEdge = ua => /Edg\//.test(ua || '');
   function renderDispositivos() {
     const agora = agoraServidor();
     const linhas = Object.entries(dispositivos)
       .filter(([, d]) => d && d.ts && (agora - d.ts) < DISPOSITIVO_MAX_IDADE_MS)
-      .sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0));
+      .sort((a, b) => (ehEdge(b[1].ua) - ehEdge(a[1].ua)) || (b[1].ts || 0) - (a[1].ts || 0));
     if (!linhas.length) { dispositivosEl.innerHTML = '<li><span class="d">Nenhum ainda.</span></li>'; return; }
     dispositivosEl.innerHTML = linhas.map(([id, d]) => {
       const vivo = segundosAtras(d.ts) < MORTA_APOS_MS / 1000;
       const quando = vivo ? 'ativo agora' : 'último sinal ' + dataHora(d.ts);
-      return '<li><span>' + escapeHtml(navegadorCurto(d.ua || '')) +
+      const selo = ehEdge(d.ua) ? ' <span class="mon-ok">⭐ provável oficial</span>' : '';
+      return '<li><span>' + escapeHtml(navegadorCurto(d.ua || '')) + selo +
         '<span class="d"> · ' + quando + '</span></span>' +
         '<button class="mon-btn" data-forcar="' + escapeHtml(id) + '">📡 Tornar ativo</button></li>';
     }).join('');
