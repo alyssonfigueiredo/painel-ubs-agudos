@@ -11,6 +11,7 @@ Site: `https://painel-ubs.soaperando.com.br`
 | Consultórios | `/01` `/02` `/03` `/04` |
 | Outras salas | `/odontologia` `/nutricao` `/enfermagem` `/triagem` `/vacina` `/medicacao` |
 | Monitor (só leitura, para acompanhar de fora sem mexer na TV) | `/monitor` |
+| Histórico do dia, com filtro por sala (só leitura) | `/historico` |
 
 Abrir o endereço da sala já entra nela sem clicar. F5 mantém a sala; uma aba nova cai na escolha.
 
@@ -40,6 +41,32 @@ responder, em 25s.
 Mesma sala aberta em dois PCs: a segunda fica bloqueada até alguém clicar
 "Assumir nesta tela".
 
+## Histórico do dia
+
+`/historico` lista tudo que foi chamado hoje, do mais recente para o mais antigo, com
+hora, nome e sala. Os chips filtram por sala e mostram quantos chamados cada uma teve;
+"Copiar lista" copia o que está filtrado em ordem cronológica. Só leitura: não grava
+nada, não entra na trava de papel e não interfere na TV. O monitor tem um botão que leva
+até lá e o histórico tem um de volta.
+
+Como o banco guarda apenas o dia, a lista esvazia às 18h e quando alguém usa
+"Limpar chamados".
+
+## "TV ativa" / "TV inativa" no monitor
+
+Quem decide é a existência do registro `painel/recepcao_ativa`, que o próprio Firebase
+apaga quando a tela da TV se desconecta. Então "TV ativa" significa "a tela está aberta e
+conectada agora", e não "mandou sinal nos últimos 45s" — essa regra antiga dava falso
+negativo: navegador espaça os timers de aba que considera em segundo plano (até 1 por
+minuto), e aí a TV aparecia inativa sem ter caído nada. A tela também regrava o sinal na
+hora em que a rede volta e quando a aba reaparece, para que uma queda de 2s não apareça no
+monitor. Só é considerada morta se o registro existir e estiver sem batimento há 10 min.
+
+Se mesmo assim aparecer inativa com frequência, o problema é fora do painel, nesta ordem:
+suspensão/economia de energia do PC, economia de energia da placa de rede, Wi-Fi caindo,
+e modo de eficiência do Edge. "Última vez ativa" no monitor diz a hora exata de cada
+queda, o que separa "cai e volta" de "ficou desligado".
+
 ## Diagnóstico de som à distância
 
 O `/monitor` mostra um card "Áudio da TV" com o que aconteceu na última fala: se saiu pela
@@ -51,8 +78,35 @@ ganho de 0, 6 ou 10 dB. Servem para decidir o volume sem ninguém mexer na TV. S
 medido estiver perto de 0 dB, o áudio já vai no máximo e o volume baixo é do equipamento
 (mixer por aplicativo do Windows, modo de som da TV, saída HDMI).
 
+O card mostra também o navegador da TV e se o som está liberado nela, e tem um botão
+"Recarregar a TV", útil se a tela travar. Recarregar não conserta o som barrado: depois
+dela pode ser preciso um clique na TV.
+
 Para mudar o volume de vez, a rota `/tts` aceita `&g=<dB>` (até 16) e a TV usa a constante
 `GANHO_VOZ_DB` no index.html.
+
+### Quando o relatório diz "voz do navegador" com play() barrado
+
+`NotAllowedError` significa que o navegador da TV recusou tocar o áudio. A voz da Google
+chegou, mas não pôde ser reproduzida, e a TV caiu na voz do navegador, que é mais baixa.
+A TV usa um único elemento de áudio, liberado no primeiro clique, e se ele for barrado usa
+o áudio de fundo, que já está tocando. Se as duas tentativas falharem, o aviso "Clique
+aqui para ativar o som" volta a aparecer na TV.
+
+Resolve com um clique na tela da TV, ou liberando Som (e Reprodução automática, no Edge)
+nas permissões do site, no cadeado ao lado do endereço.
+
+## Tema de outubro (Outubro Rosa)
+
+Durante todo o mês de outubro o painel troca as cores para a campanha (fundo rosa claro,
+cards brancos, detalhes em rosa) e mostra uma faixa "OUTUBRO ROSA · Faça o autoexame.
+Procure a UBS." no topo da TV, dos consultórios e da tela de escolha de sala. Em 1 de
+novembro volta ao tema normal sozinho, sem deploy: quem decide é a data da própria tela
+(`aplicarTemaSazonal`, chamada junto do relógio).
+
+São só cores e a faixa; nenhuma regra de chamada, fila, voz ou limpeza muda. Para trocar
+a frase, editar `.fc-s` no index.html (os três blocos `faixa-campanha`). O monitor e o
+histórico também ficam claros no mês, mas sem a faixa.
 
 ## Privacidade
 

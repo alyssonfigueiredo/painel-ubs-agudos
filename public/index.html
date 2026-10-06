@@ -279,7 +279,7 @@
   .mon-card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 22px 24px; margin-bottom: 20px; }
   .mon-card .t { color: var(--text-dim); font-size: 13px; font-weight: 700; letter-spacing: 0.1em; margin-bottom: 10px; }
   .mon-card .v { font-size: 22px; font-weight: 700; line-height: 1.3; }
-  .mon-card .sub3 { color: var(--text-dim); font-size: 14px; margin-top: 4px; }
+  .mon-card .sub3 { color: var(--text-dim); font-size: 14px; margin-top: 4px; white-space: pre-line; }
   .mon-ok { color: #7fd8a6; }
   .mon-bad { color: #ff8a80; }
   .mon-lista { list-style: none; margin: 0; padding: 0; }
@@ -295,6 +295,29 @@
   .mon-btn:hover { border-color: var(--coral); }
   .mon-btn:disabled { opacity: .4; cursor: default; }
 
+  /* ---------- histórico do dia (só leitura) ---------- */
+  .hist-topo { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+  .hist-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .chip {
+    background: transparent; color: var(--text-dim);
+    border: 1px solid var(--line); padding: 9px 14px;
+    font-weight: 600; font-size: 14px; border-radius: 999px;
+    cursor: pointer; font-family: inherit;
+  }
+  .chip:hover { border-color: var(--coral); color: var(--text); }
+  .chip.ativo { background: var(--coral); color: #21140f; border-color: transparent; }
+  .chip .n { opacity: .65; margin-left: 6px; font-weight: 700; }
+  .hist-tabela { background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+  .hist-linha { display: flex; align-items: baseline; gap: 16px; padding: 14px 22px; border-bottom: 1px solid var(--line); }
+  .hist-linha:last-child { border-bottom: none; }
+  .hist-linha:nth-child(even) { background: rgba(255,255,255,0.02); }
+  .hist-linha .pos { color: var(--text-dim); font-size: 13px; min-width: 34px; }
+  .hist-linha .hora { font-weight: 700; font-size: 17px; min-width: 62px; }
+  .hist-linha .nome { font-weight: 600; font-size: 17px; flex: 1; word-break: break-word; }
+  .hist-linha .sala { color: var(--text-dim); font-size: 14px; text-align: right; }
+  .hist-vazio { padding: 28px 22px; color: var(--text-dim); text-align: center; }
+  .hist-resumo { color: var(--text-dim); font-size: 14px; margin-top: 14px; }
+
   .mudo-btn.mudo-ativo {
     background: #7a1f1f;
     border-color: #ff6b6b;
@@ -304,6 +327,83 @@
   @keyframes piscaMudo {
     0%, 100% { box-shadow: 0 4px 18px rgba(255,107,107,0.15); }
     50% { box-shadow: 0 4px 28px rgba(255,107,107,0.65); }
+  }
+
+  /* ---------- Outubro Rosa (tema sazonal) ----------
+     Entra e sai pela própria data da tela, em aplicarTemaSazonal(): durante outubro o
+     <html> ganha a classe tema-rosa; em 1 de novembro ela sai sozinha, sem deploy.
+     Só cores e a faixa da campanha: nenhuma regra de chamada, fila ou voz muda. */
+  html.tema-rosa{
+    --bg: #fdeff5;
+    --card: #ffffff;
+    --card-2: #fffafc;
+    --line: rgba(120,25,70,0.16);
+    --text: #1d1016;
+    --text-dim: #7c5a68;
+    --coral: #c2185b;
+    --yellow: #e91e63;
+  }
+  /* fundo claro precisa de sombra para o card não "flutuar" sem borda */
+  html.tema-rosa .main-card,
+  html.tema-rosa .history-item,
+  html.tema-rosa .empty-hist,
+  html.tema-rosa .picker-card,
+  html.tema-rosa .card,
+  html.tema-rosa .mon-card,
+  html.tema-rosa .hist-tabela { box-shadow: 0 2px 10px rgba(130,30,75,0.07); }
+  html.tema-rosa .main-card::before, html.tema-rosa .card::before { opacity: 1; }
+  /* botões de fundo rosa escuro pedem texto claro */
+  html.tema-rosa .recepcao-btn button,
+  html.tema-rosa button.primary,
+  html.tema-rosa #bloqAssumir,
+  html.tema-rosa .chip.ativo { color: #fff; }
+  /* avisos de tela cheia continuam escuros, então o texto deles vira claro */
+  html.tema-rosa #overlay, html.tema-rosa #bloqueado { background: rgba(74,8,40,0.94); color: #fff; }
+  html.tema-rosa #overlay p, html.tema-rosa #bloqueado p { color: #f3d7e4; }
+  html.tema-rosa #bloqueado h2 { color: #ffb3d1; }
+  html.tema-rosa #bloqSair { background: rgba(255,255,255,0.12); color: #fff; }
+  html.tema-rosa #diagnostico { color: #ad1457; }
+
+  /* faixa da campanha: só aparece com o tema ligado */
+  .faixa-campanha { display: none; }
+  html.tema-rosa .faixa-campanha {
+    display: flex; align-items: center; justify-content: center; gap: 22px;
+    background: linear-gradient(90deg, #ad1457, #e91e63);
+    color: #fff; padding: 16px 24px;
+  }
+  .faixa-campanha svg { flex: none; }
+  /* a tela do consultório centraliza o card com flex, então lá a faixa vai fixa no topo
+     (senão ela entra como item do flex e fica ao lado do card) */
+  html.tema-rosa #view-caller .faixa-campanha { position: fixed; top: 0; left: 0; right: 0; z-index: 2; }
+  html.tema-rosa #view-caller.active { padding: 96px 0 24px; }
+  .faixa-campanha .fc-t {
+    font-family: 'Manrope', Arial, sans-serif; font-weight: 800;
+    font-size: 30px; letter-spacing: 0.14em; line-height: 1;
+  }
+  .faixa-campanha .fc-s { font-size: 18px; opacity: 0.93; margin-top: 6px; }
+  /* 1366x768 (resolução do PC da recepção): cabeçalho não pode quebrar em duas linhas */
+  .clock .date { white-space: nowrap; }
+  @media (max-width: 1500px) {
+    .faixa-campanha .fc-t { font-size: 26px; }
+    .faixa-campanha .fc-s { font-size: 16px; }
+  }
+  /* tela baixa (TV/PC em 768px de altura): a faixa não pode empurrar o rodapé de
+     botões para fora do quadro, então tudo encolhe um pouco */
+  @media (max-height: 820px) {
+    .faixa-campanha { padding: 9px 24px; gap: 16px; }
+    .faixa-campanha svg { width: 38px; height: 54px; }
+    .faixa-campanha .fc-t { font-size: 23px; }
+    .faixa-campanha .fc-s { font-size: 15px; margin-top: 3px; }
+    .page { padding: 20px 56px; }
+    header { padding-bottom: 18px; margin-bottom: 20px; }
+    .brasao { height: 86px; }
+    .brand h1 { font-size: 26px; }
+    .main-card { min-height: 0; padding: 40px 48px; }
+    .patient-name { font-size: 68px; }
+    .history-item .nome { font-size: 30px; }
+    .history-item .sala { font-size: 19px; }
+    .operador { margin-top: 18px; padding-top: 14px; }
+    html.tema-rosa #view-caller.active { padding-top: 76px; }
   }
 </style>
 </head>
@@ -321,6 +421,16 @@
 
 <!-- ============ PICKER (escolha de papel, uma vez por PC) ============ -->
 <div id="view-picker" class="view">
+  <div class="faixa-campanha" aria-label="Campanha Outubro Rosa">
+    <svg viewBox="0 0 24 34" width="54" height="76" aria-hidden="true">
+      <path d="M12 9 C12 9 5.5 20 4 25.5 C3 29.2 5.5 31.5 7 30 C9 28 11 20 12 15 C13 20 15 28 17 30 C18.5 31.5 21 29.2 20 25.5 C18.5 20 12 9 12 9 Z" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M12 3 C7.5 6 7.5 12 12 15 C16.5 12 16.5 6 12 3 Z" fill="none" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/>
+    </svg>
+    <div>
+      <div class="fc-t">OUTUBRO ROSA</div>
+      <div class="fc-s">Faça o autoexame. Procure a UBS.</div>
+    </div>
+  </div>
   <div class="page">
     <header>
       <div class="brand">
@@ -349,6 +459,16 @@
 
 <!-- ============ CALLER (dentro de um consultório) ============ -->
 <div id="view-caller" class="view">
+  <div class="faixa-campanha" aria-label="Campanha Outubro Rosa">
+    <svg viewBox="0 0 24 34" width="54" height="76" aria-hidden="true">
+      <path d="M12 9 C12 9 5.5 20 4 25.5 C3 29.2 5.5 31.5 7 30 C9 28 11 20 12 15 C13 20 15 28 17 30 C18.5 31.5 21 29.2 20 25.5 C18.5 20 12 9 12 9 Z" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M12 3 C7.5 6 7.5 12 12 15 C16.5 12 16.5 6 12 3 Z" fill="none" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/>
+    </svg>
+    <div>
+      <div class="fc-t">OUTUBRO ROSA</div>
+      <div class="fc-s">Faça o autoexame. Procure a UBS.</div>
+    </div>
+  </div>
   <div class="card">
     <div class="sub">PAINEL DE CHAMADA</div>
     <h1 id="salaAtual"></h1>
@@ -366,9 +486,22 @@
 <!-- ============ RECEPÇÃO (espelho na TV) ============ -->
 <div id="view-recepcao" class="view">
   <audio id="keepAliveAudio" loop preload="auto" src="data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA=="></audio>
+  <!-- elemento REUTILIZADO em todas as falas: navegadores liberam o elemento que já
+       tocou uma vez, não os criados depois (era por isso que a TV caía na voz do navegador) -->
+  <audio id="vozAudio" preload="auto"></audio>
   <div id="overlay">
     <h2>Clique aqui para ativar o som</h2>
     <p>Necessário uma vez para o navegador liberar a fala em voz alta.</p>
+  </div>
+  <div class="faixa-campanha" aria-label="Campanha Outubro Rosa">
+    <svg viewBox="0 0 24 34" width="54" height="76" aria-hidden="true">
+      <path d="M12 9 C12 9 5.5 20 4 25.5 C3 29.2 5.5 31.5 7 30 C9 28 11 20 12 15 C13 20 15 28 17 30 C18.5 31.5 21 29.2 20 25.5 C18.5 20 12 9 12 9 Z" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M12 3 C7.5 6 7.5 12 12 15 C16.5 12 16.5 6 12 3 Z" fill="none" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/>
+    </svg>
+    <div>
+      <div class="fc-t">OUTUBRO ROSA</div>
+      <div class="fc-s">Faça o autoexame. Procure a UBS.</div>
+    </div>
   </div>
   <div class="page">
     <header>
@@ -454,7 +587,10 @@
             <button class="mon-btn" data-ganho="6">🔊 Tocar +6 dB</button>
             <button class="mon-btn" data-ganho="10">🔊 Tocar +10 dB</button>
           </div>
-          <div class="sub3" id="monTesteSub" style="margin-top:8px">A verificação é camuflada: não faz som, não aparece na TV e não mexe em nada. Os três de baixo tocam no alto-falante e os pacientes ouvem (pedem confirmação).</div>
+          <div style="margin-top:6px">
+            <button class="mon-btn" id="monRecarregar">🔄 Recarregar a TV</button>
+          </div>
+          <div class="sub3" id="monTesteSub" style="margin-top:8px">A verificação é camuflada: não faz som, não aparece na TV e não mexe em nada. Os três com som tocam no alto-falante e os pacientes ouvem (pedem confirmação). Recarregar reinicia a tela da TV, e depois dela alguém pode precisar clicar uma vez na TV pra liberar o som.</div>
         </div>
         <div class="mon-card">
           <div class="t">SALAS (TELA ABERTA OU ÚLTIMA VEZ)</div>
@@ -470,10 +606,42 @@
         <div class="mon-card">
           <div class="t">CHAMADOS DE HOJE (MAIS RECENTES)</div>
           <ul class="mon-lista" id="monHistorico"><li>Nenhum chamado ainda.</li></ul>
+          <div style="margin-top:14px"><button class="mon-btn" id="monVerHistorico">📋 Ver todos, com filtro por sala</button></div>
           <div class="mon-nota">Não dá pra saber daqui se o som saiu na TV; dá pra ver que o chamado chegou e que a TV o anunciou (Falando agora).</div>
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ============ HISTÓRICO DO DIA (só leitura, com filtro por sala) ============ -->
+<div id="view-historico" class="view">
+  <div class="page">
+    <header>
+      <div class="brand">
+        <div class="brasao"><img src="/img/brasao.png" alt="Brasão de Agudos do Sul" onerror="this.parentNode.remove()"></div>
+        <div>
+          <h1>UBS Francisca de Oliveira Silva</h1>
+          <div class="sub2">CHAMADOS DE HOJE · SÓ LEITURA</div>
+        </div>
+      </div>
+      <div class="clock">
+        <div class="time js-hora">--:--</div>
+        <div class="date js-data"></div>
+      </div>
+    </header>
+    <div class="hist-topo">
+      <div class="side-title" id="histTitulo">TODAS AS SALAS</div>
+      <div>
+        <button class="mon-btn" id="histCopiar">📋 Copiar lista</button>
+        <button class="mon-btn" id="histMonitor">📺 Ver o monitor</button>
+      </div>
+    </div>
+    <div class="hist-chips" id="histChips"></div>
+    <div class="hist-tabela" id="histLista">
+      <div class="hist-vazio">Carregando...</div>
+    </div>
+    <div class="hist-resumo" id="histResumo"></div>
   </div>
 </div>
 
@@ -565,7 +733,8 @@ const views = {
   picker: document.getElementById('view-picker'),
   caller: document.getElementById('view-caller'),
   recepcao: document.getElementById('view-recepcao'),
-  monitor: document.getElementById('view-monitor')
+  monitor: document.getElementById('view-monitor'),
+  historico: document.getElementById('view-historico')
 };
 
 function mostrarView(nome) {
@@ -605,6 +774,7 @@ function papelDaUrl() {
   const alvo = slug(q);
   if (alvo === 'recepcao') return 'recepcao';
   if (alvo === 'monitor') return 'monitor';
+  if (alvo === 'historico') return 'historico';
   if (ATALHO_URL[alvo]) return ATALHO_URL[alvo];
   return SALAS.find(sala => slug(sala) === alvo) || null;
 }
@@ -618,8 +788,13 @@ function init() {
   } catch (e) {}
   const daUrl = papelDaUrl();
   const papel = daUrl || papelSalvo(); // 'recepcao' ou nome de uma sala
-  if (daUrl && daUrl !== 'monitor') guardarPapel(daUrl);
-  if (papel === 'monitor') {
+  // monitor e histórico são telas de consulta: não viram o papel da aba
+  if (daUrl && daUrl !== 'monitor' && daUrl !== 'historico') guardarPapel(daUrl);
+  if (papel === 'historico') {
+    definirTitulo('Histórico de hoje');
+    mostrarView('historico');
+    iniciarHistorico();
+  } else if (papel === 'monitor') {
     definirTitulo('Monitor');
     mostrarView('monitor');
     iniciarMonitor();
@@ -655,7 +830,16 @@ function iniciarQuandoSouberAHora() {
 // ninguém mais aberto), a tela assume. O id da tela fica em sessionStorage: um F5 na
 // mesma aba mantém o id, então a tela reconhece a si mesma e segue ativa.
 const BATIMENTO_MS = 15000;
-const MORTA_APOS_MS = 45000; // 3 batimentos perdidos
+// O Firebase apaga o registro da trava assim que a tela cai (onDisconnect), então o
+// registro EXISTIR já quer dizer "aquela tela está conectada agora". Por isso quem decide
+// se a TV está viva é a existência do registro, não a idade do batimento: navegador
+// espaça os timers de aba que ele considera em segundo plano (chega a 1 por minuto), e era
+// por isso que a TV aparecia "inativa" no /monitor sem ter caído nada.
+const MORTA_APOS_MS = 150000;        // só na CARGA: registro parado há mais que isso é órfão
+const SEM_SINAL_LIMITE_MS = 600000;  // 10 min sem nenhum batimento: aí sim está morta
+function papelVivo(val) {
+  return !!(val && val.id && (agoraServidor() - (val.ts || 0)) < SEM_SINAL_LIMITE_MS);
+}
 let offsetServidor = 0; // relógio do PC pode estar errado; compara ts com a hora do servidor
 db.ref('.info/serverTimeOffset').on('value', snap => { offsetServidor = snap.val() || 0; });
 function agoraServidor() { return Date.now() + offsetServidor; }
@@ -678,6 +862,7 @@ function travaDePapel(ref, aoMudar, refUltimoSinal) {
   let batimento = null;
   function gravar() {
     ref.set({ id: meuId, ts: firebase.database.ServerValue.TIMESTAMP });
+    ref.onDisconnect().remove();  // reconexão descarta o onDisconnect antigo; registra de novo
     // fica no banco depois que a tela some (só informativo; se a regra faltar, ignora)
     if (refUltimoSinal) refUltimoSinal.set(firebase.database.ServerValue.TIMESTAMP).catch(() => {});
   }
@@ -713,10 +898,21 @@ function travaDePapel(ref, aoMudar, refUltimoSinal) {
     if (ativa && val && val.id && val.id !== meuId) bloquear(val);
   };
   ref.on('value', escuta);
+  // Sem estes três, uma queda de rede de 2s deixava o papel "inativo" por até 15s (o
+  // Firebase apaga o registro na desconexão e só o próximo batimento o traz de volta).
+  const conexao = db.ref('.info/connected');
+  const aoReconectar = snap => { if (snap.val() && ativa) gravar(); };
+  const aoAparecer = () => { if (ativa && !document.hidden) gravar(); };
+  conexao.on('value', aoReconectar);
+  document.addEventListener('visibilitychange', aoAparecer);
+  window.addEventListener('online', aoAparecer);
   return {
     assumir,
     parar() {
       ref.off('value', escuta);
+      conexao.off('value', aoReconectar);
+      document.removeEventListener('visibilitychange', aoAparecer);
+      window.removeEventListener('online', aoAparecer);
       clearInterval(batimento);
       // o onDisconnect().remove() fica registrado de propósito: se a página navegar
       // antes deste remove() chegar, o Firebase apaga ao ver a desconexão. Sem isso,
@@ -766,9 +962,17 @@ function vigiarVersao(podeRecarregar) {
   });
 }
 
+
+// tema sazonal: durante outubro o painel usa as cores da campanha (ver .tema-rosa no CSS).
+// Roda junto do relógio, então a virada de 31/10 para 1/11 acontece sozinha, sem deploy.
+function aplicarTemaSazonal(agora) {
+  const outubro = (agora || new Date()).getMonth() === 9;
+  document.documentElement.classList.toggle('tema-rosa', outubro);
+}
 // relógio do cabeçalho (TV e tela de escolha de sala)
 function atualizarRelogio() {
   const agora = new Date();
+  aplicarTemaSazonal(agora);
   const hora = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const data = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
   document.querySelectorAll('.js-hora').forEach(el => { el.textContent = hora; });
@@ -923,7 +1127,7 @@ function iniciarCaller(sala) {
   db.ref(DB.falando).on('value', snap => { falandoNaTv = !!snap.val(); reagendarSolta(); });
   db.ref(DB.recepcaoAtiva).on('value', snap => {
     const tv = snap.val();
-    tvViva = !!(tv && tv.ts && (agoraServidor() - tv.ts) < MORTA_APOS_MS);
+    tvViva = papelVivo(tv);
   });
   db.ref(DB.anunciando).on('value', snap => {
     const noAr = snap.val();
@@ -1166,6 +1370,8 @@ function iniciarRecepcao() {
     }
   }
 
+  // mesmo silêncio do keepAlive, usado pra destrancar o elemento da voz
+  const SILENCIO_WAV = document.getElementById('keepAliveAudio').getAttribute('src');
   let somLiberado = false;
   let comoLiberou = 'ainda não';
   let ultimoBloqueio = ''; // registra o motivo uma vez, não a cada 10s
@@ -1195,10 +1401,94 @@ function iniciarRecepcao() {
     // clicando Repetir na tela")
     if (!audioCtx) iniciarAudioContextSilencioso();
     tentarLiberarAudio();
+    destrancarVoz();
     overlay.style.display = 'none';
+  }
+
+  // Dá um play/pause no elemento da voz no momento em que o som é liberado (clique ou
+  // liberação automática). Depois disso ele toca sem gesto novo, em qualquer navegador.
+  const vozEl = document.getElementById('vozAudio');
+  let vozDestrancada = false;
+  function destrancarVoz() {
+    if (!vozEl || vozDestrancada) return;
+    try {
+      vozEl.muted = true;
+      vozEl.src = SILENCIO_WAV;
+      const p = vozEl.play();
+      if (p && p.then) p.then(() => {
+        vozDestrancada = true;
+        vozEl.pause();
+        vozEl.muted = false;
+        diag('elemento de voz destrancado');
+      }).catch(err => diag('não destrancou o elemento de voz: ' + (err && err.name ? err.name : err)));
+    } catch (e) {}
   }
   overlay.onclick = () => { comoLiberou = 'clique'; liberarSom(); };
   tentarLiberarAudio();
+
+  // Toca o MP3 num elemento JÁ LIBERADO. Tenta o elemento da voz; se o navegador barrar
+  // (NotAllowedError), usa o keepAlive, que está tocando o silêncio desde a liberação e
+  // por isso não é barrado — e devolve o silêncio no fim. Devolve uma promessa.
+  // Recarga pedida pelo /monitor: espera a TV acabar de anunciar (e a fila esvaziar),
+  // pra não cortar a fala de um paciente no meio. Se a fila não andar, recarrega de
+  // qualquer jeito depois de 2 min — a tela pode estar justamente travada.
+  const ESPERA_RECARGA_MS = 120000;
+  let recargaPedida = false;
+  function recarregarQuandoPuder() {
+    if (recargaPedida) return;
+    recargaPedida = true;
+    const limite = Date.now() + ESPERA_RECARGA_MS;
+    diag('recarga pedida de longe pelo /monitor');
+    const tentar = () => {
+      const ocupada = processando || filaChamados.length > 0;
+      if (ocupada && Date.now() < limite) {
+        registrarStatus({ tipo: 'recarga', erro: 'esperando a TV terminar de anunciar (' + filaChamados.length + ' na fila)' });
+        setTimeout(tentar, 2000);
+        return;
+      }
+      if (ocupada) diag('recarga: a fila não andou em 2 min, recarregando mesmo assim');
+      registrarStatus({ tipo: 'recarga', fonte: 'monitor' });
+      setTimeout(() => location.reload(), 300);
+    };
+    tentar();
+  }
+
+  // silencioso = corta o som ANTES do play, pra não vazar nem um pedacinho na recepção
+  function tocarNoElemento(objectUrl, aoTerminar, aoFalhar, silencioso) {
+    const kaEl = document.getElementById('keepAliveAudio');
+    function preparar(el) {
+      el.onended = null; el.onerror = null;
+      el.muted = !!silencioso;
+      el.volume = silencioso ? 0 : 1;
+      el.loop = false;
+      el.currentTime = 0;
+      return el;
+    }
+    function tentar(el, ehKeepAlive) {
+      preparar(el);
+      el.src = objectUrl;
+      function restaurar() {
+        el.onended = null; el.onerror = null;
+        el.muted = false;        // devolve pronto pro próximo chamado
+        el.volume = 1;
+        if (ehKeepAlive) { // devolve o silêncio em loop, senão a aba deixa de "produzir áudio"
+          el.loop = true;
+          el.src = SILENCIO_WAV;
+          el.play().catch(() => {});
+        }
+      }
+      el.onended = () => { restaurar(); aoTerminar(el); };
+      el.onerror = () => { restaurar(); aoFalhar('áudio do /tts não tocou'); };
+      audioAtual = el;
+      return el.play().then(() => ({ el: el, via: ehKeepAlive ? 'keepAlive' : 'elemento da voz' }));
+    }
+    return tentar(vozEl, false).catch(err => {
+      const nome = err && err.name ? err.name : String(err);
+      if (nome !== 'NotAllowedError' || !kaEl) throw err;
+      diag('elemento da voz barrado (' + nome + '); usando o áudio de fundo, que já está liberado');
+      return tentar(kaEl, true);
+    });
+  }
 
   // ganho de volume pedido ao /tts (dB). 0 = como a Google entrega.
   const GANHO_VOZ_DB = 0;
@@ -1233,10 +1523,15 @@ function iniciarRecepcao() {
 
   // publica o resultado da última fala pra quem olha o /monitor de longe. Sem nome de
   // paciente: só sala, fonte da voz, tempos e níveis.
+  // navegador da TV, pra diagnosticar de longe qual é (nenhum dado pessoal)
+  const NAVEGADOR = String(navigator.userAgent || '').slice(0, 160);
   const statusRef = db.ref(DB.tvStatus);
   function registrarStatus(dados) {
     if (!ativaFalando) return;
-    statusRef.set(Object.assign({ ts: firebase.database.ServerValue.TIMESTAMP, mudo: mudo, ganho: GANHO_VOZ_DB }, dados)).catch(() => {});
+    statusRef.set(Object.assign({
+      ts: firebase.database.ServerValue.TIMESTAMP, mudo: mudo, ganho: GANHO_VOZ_DB,
+      liberado: somLiberado, ua: NAVEGADOR
+    }, dados)).catch(() => {});
   }
 
   // texto pra FALA (a tela continua em maiúsculas): nome todo em maiúsculas o TTS lê
@@ -1333,22 +1628,34 @@ function iniciarRecepcao() {
         return res.blob();
       }).then(blob => {
         if (concluido) return;
-        const audio = new Audio(URL.createObjectURL(blob));
-        audioAtual = audio;
+        const objectUrl = URL.createObjectURL(blob);
         const msAteTocar = Date.now() - t0;
-        audio.onended = () => {
-          diag('terminou em ' + (Date.now() - t0) + 'ms (duração=' + audio.duration.toFixed(1) + 's)');
-          URL.revokeObjectURL(audio.src);
+        let via = '';
+        tocarNoElemento(objectUrl, el => {
+          diag('terminou em ' + (Date.now() - t0) + 'ms (duração=' + (el.duration || 0).toFixed(1) + 's)');
+          URL.revokeObjectURL(objectUrl);
           finalizar();
           // relatório pro /monitor, medido SÓ AGORA, depois da fala, fora do caminho do som
           medirNivel(blob).then(n => registrarStatus(Object.assign({
-            tipo: 'chamado', fonte: 'tts', sala: salaAtualNoAr, ms: msAteTocar, liberou: comoLiberou
+            tipo: 'chamado', fonte: 'tts', sala: salaAtualNoAr, ms: msAteTocar, liberou: comoLiberou,
+            via: via, ua: NAVEGADOR
           }, n || {})));
-        };
-        audio.onerror = () => { URL.revokeObjectURL(audio.src); aoFalhar('áudio do /tts não tocou'); };
-        audio.play()
-          .then(() => diag('tocando /tts (Orus) após ' + (Date.now() - t0) + 'ms (som liberado: ' + comoLiberou + ')'))
-          .catch(err => aoFalhar('play() do áudio falhou: ' + (err && err.name ? err.name : err)));
+        }, motivo => { URL.revokeObjectURL(objectUrl); aoFalhar(motivo); })
+          .then(r => { via = r.via; diag('tocando /tts (Orus) no ' + r.via + ' após ' + (Date.now() - t0) + 'ms (som liberado: ' + comoLiberou + ')'); })
+          .catch(err => {
+            const nome = err && err.name ? err.name : String(err);
+            URL.revokeObjectURL(objectUrl);
+            if (nome === 'NotAllowedError') {
+              // o navegador exige um clique nesta tela: volta a mostrar o aviso na TV
+              somLiberado = false;
+              vozDestrancada = false;
+              overlay.style.display = 'flex';
+              diag('navegador exige clique na tela: aviso de ativar o som reaparece');
+            }
+            registrarStatus({ tipo: 'chamado', fonte: 'tts', sala: salaAtualNoAr, ua: NAVEGADOR,
+              erro: 'play() barrado: ' + nome + (nome === 'NotAllowedError' ? ' (precisa de um clique na TV ou liberar som nas permissões do site)' : '') });
+            aoFalhar('play() do áudio falhou: ' + nome);
+          });
       }).catch(err => {
         registrarStatus({ tipo: 'chamado', fonte: 'tts', sala: salaAtualNoAr, erro: String(err.message).slice(0, 120) });
         aoFalhar('/tts falhou: ' + err.message);
@@ -1390,6 +1697,7 @@ function iniciarRecepcao() {
     ultimoTeste = p.pedido;
     if (!ativaFalando) return; // espelho não responde; só a TV que fala
     if (agoraServidor() - p.pedido > 120000) return; // pedido velho: ignora
+    if (p.acao === 'recarregar') { recarregarQuandoPuder(); return; }
     const silencioso = !!p.silencioso;
     if (!silencioso && processando) { registrarStatus({ tipo: 'teste', erro: 'TV ocupada anunciando um chamado' }); return; }
     if (!silencioso && mudo) { registrarStatus({ tipo: 'teste', erro: 'TV está no mudo (botão Silenciar voz)' }); return; }
@@ -1426,21 +1734,28 @@ function iniciarRecepcao() {
       if (!res.ok) return res.text().then(m => { throw new Error(res.status + ' ' + m.slice(0, 120)); });
       return res.blob();
     }).then(blob => {
-      if (!silencioso && liberou) return; // já foi cortado (mudo/tempo) enquanto baixava
-      const audio = new Audio(URL.createObjectURL(blob));
-      if (silencioso) { audio.muted = true; audio.volume = 0; } // dois cintos: nenhum navegador deixa sair som
-      else audioAtual = audio;
-      audio.onended = () => { URL.revokeObjectURL(audio.src); liberarFila(); };
-      audio.onerror = () => liberarFila();
-      audio.play().then(() => {
-        if (silencioso) setTimeout(() => { try { audio.pause(); } catch (e) {} }, 300);
-        // mede só depois, fora do caminho do som
-        medirNivel(blob).then(n => registrarStatus(Object.assign(
-          { tipo: tipo, fonte: 'tts', ganhoTeste: ganho, ms: Date.now() - t0, liberou: comoLiberou }, n || {})));
-      }).catch(err => {
-        liberarFila();
-        registrarStatus({ tipo: tipo, fonte: 'tts', ganhoTeste: ganho, erro: 'play() ' + (err && err.name ? err.name : err) });
-      });
+      if (!silencioso && liberou) return; // já foi cortado (mudo/tempo) enquanto baixando
+      const objectUrl = URL.createObjectURL(blob);
+      tocarNoElemento(objectUrl, () => { URL.revokeObjectURL(objectUrl); liberarFila(); }, () => liberarFila(), silencioso)
+        .then(r => {
+          if (silencioso) {
+            // o play() real já foi testado sem som nenhum; corta em seguida e devolve
+            // o elemento pronto (sem mudo, volume cheio) pro próximo chamado
+            setTimeout(() => {
+              try { r.el.pause(); } catch (e) {}
+              r.el.muted = false; r.el.volume = 1;
+              if (r.via === 'keepAlive') { r.el.loop = true; r.el.src = SILENCIO_WAV; r.el.play().catch(() => {}); }
+              URL.revokeObjectURL(objectUrl);
+            }, 250);
+          }
+          medirNivel(blob).then(n => registrarStatus(Object.assign(
+            { tipo: tipo, fonte: 'tts', ganhoTeste: ganho, ms: Date.now() - t0, liberou: comoLiberou, via: r.via, ua: NAVEGADOR }, n || {})));
+        }).catch(err => {
+          URL.revokeObjectURL(objectUrl);
+          liberarFila();
+          registrarStatus({ tipo: tipo, fonte: 'tts', ganhoTeste: ganho, ua: NAVEGADOR,
+            erro: 'play() ' + (err && err.name ? err.name : err) });
+        });
     }).catch(err => {
       liberarFila();
       registrarStatus({ tipo: tipo, ganhoTeste: ganho, erro: String(err.message).slice(0, 120) });
@@ -1541,6 +1856,94 @@ function iniciarRecepcao() {
   };
 }
 
+// ---------------- histórico do dia: só leitura ----------------
+// /historico — lista tudo que foi chamado hoje, com filtro por sala. Não grava nada,
+// não entra na trava de papel e não interfere na TV. O banco guarda só o dia: às 18h
+// (ou no botão "Limpar chamados") tudo é apagado e esta tela esvazia junto.
+function iniciarHistorico() {
+  const chipsEl = document.getElementById('histChips');
+  const listaEl = document.getElementById('histLista');
+  const tituloEl = document.getElementById('histTitulo');
+  const resumoEl = document.getElementById('histResumo');
+  const MAX_HIST = 500;
+  let chamados = [];      // mais recente primeiro
+  let filtro = '';        // '' = todas as salas
+
+  const hora = ts => ts ? new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+  const doFiltro = () => filtro ? chamados.filter(c => c.sala === filtro) : chamados;
+
+  function renderChips() {
+    const contagem = {};
+    chamados.forEach(c => { contagem[c.sala] = (contagem[c.sala] || 0) + 1; });
+    // todas as salas primeiro, na ordem do painel; depois qualquer sala antiga que ainda apareça
+    const nomes = SALAS.concat(Object.keys(contagem).filter(n => !SALAS.includes(n)).sort());
+    const chip = (rotulo, valor, n) =>
+      '<button class="chip' + (filtro === valor ? ' ativo' : '') + '" data-sala="' + escapeHtml(valor) + '">' +
+      escapeHtml(rotulo) + (n ? '<span class="n">' + n + '</span>' : '') + '</button>';
+    chipsEl.innerHTML = chip('Todas', '', chamados.length) +
+      nomes.map(n => chip(n, n, contagem[n] || 0)).join('');
+    chipsEl.querySelectorAll('.chip').forEach(b => {
+      b.onclick = () => { filtro = b.dataset.sala; render(); };
+    });
+  }
+
+  function render() {
+    const itens = doFiltro();
+    tituloEl.textContent = (filtro || 'TODAS AS SALAS').toUpperCase();
+    listaEl.innerHTML = itens.length
+      ? itens.map((c, i) =>
+          '<div class="hist-linha">' +
+            '<span class="pos">' + (itens.length - i) + '</span>' +
+            '<span class="hora">' + hora(c.ts) + '</span>' +
+            '<span class="nome">' + escapeHtml(c.nome) + '</span>' +
+            (filtro ? '' : '<span class="sala">' + escapeHtml(c.sala) + '</span>') +
+          '</div>').join('')
+      : '<div class="hist-vazio">' + (chamados.length
+          ? 'Nenhum chamado em ' + escapeHtml(filtro) + ' hoje.'
+          : 'Nenhum chamado hoje ainda. O histórico é apagado todo dia às 18h.') + '</div>';
+    const primeiro = itens.length ? itens[itens.length - 1] : null;
+    const ultimo = itens.length ? itens[0] : null;
+    resumoEl.textContent = itens.length
+      ? itens.length + (itens.length > 1 ? ' chamados' : ' chamado') +
+        ' · do primeiro às ' + hora(primeiro.ts) + ' ao último às ' + hora(ultimo.ts)
+      : '';
+    renderChips();
+  }
+
+  document.getElementById('histCopiar').onclick = () => {
+    const itens = doFiltro();
+    const texto = itens.slice().reverse()
+      .map((c, i) => (i + 1) + '. ' + hora(c.ts) + '  ' + c.nome + (filtro ? '' : '  (' + c.sala + ')'))
+      .join('\n');
+    const cabecalho = (filtro || 'Todas as salas') + ' — ' + new Date().toLocaleDateString('pt-BR') +
+      ' (' + itens.length + ')\n';
+    const botao = document.getElementById('histCopiar');
+    const aviso = txt => { botao.textContent = txt; setTimeout(() => { botao.textContent = '📋 Copiar lista'; }, 2000); };
+    if (!itens.length) { aviso('nada para copiar'); return; }
+    const tudo = cabecalho + texto;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(tudo).then(() => aviso('✅ copiado'), () => aviso('não deu; use Ctrl+C'));
+    } else aviso('navegador não deixou copiar');
+  };
+  document.getElementById('histMonitor').onclick = () => { location.href = '/monitor'; };
+
+  const ref = db.ref(DB.chamadas).orderByChild('ts').limitToLast(MAX_HIST);
+  ref.on('child_added', snap => {
+    const val = snap.val();
+    if (!val || !val.nome) return;
+    chamados.push({ key: snap.key, nome: val.nome, sala: val.sala || '', ts: val.ts || 0 });
+    chamados.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    render();
+  });
+  ref.on('child_removed', snap => {
+    const antes = chamados.length;
+    chamados = chamados.filter(c => c.key !== snap.key);
+    if (chamados.length !== antes) render();
+  });
+
+  vigiarVersao(() => true);
+}
+
 // ---------------- monitor: só leitura ----------------
 // /monitor — pra conferir de fora se a TV está de pé, sem abrir uma recepção (que viraria
 // espelho e cobriria a tela com o aviso). Só escuta o banco; não grava, não fala, não trava.
@@ -1561,18 +1964,19 @@ function iniciarMonitor() {
     const d = new Date(ts);
     return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   }
-  // TV: existe registro em recepcao_ativa com batimento recente (a cada 15s; morta após 45s).
-  // Quando não existe, tv_ultimo_sinal diz desde quando ela sumiu.
+  // TV: o registro em recepcao_ativa existe enquanto a tela está conectada (o Firebase o
+  // apaga na desconexão). Quando não existe, tv_ultimo_sinal diz desde quando ela sumiu.
   let tv = null;
   let tvUltimo = null;
   function renderTv() {
     const ts = (tv && tv.ts) || 0;
     const seg = ts ? segundosAtras(ts) : Infinity;
-    const viva = seg < MORTA_APOS_MS / 1000;
-    if (viva) {
+    if (papelVivo(tv)) {
       tvEl.textContent = 'TV ativa';
       tvEl.className = 'v mon-ok';
-      tvSubEl.textContent = 'Último sinal há ' + seg + 's (' + horaCompleta(ts) + '). A TV avisa a cada 15s.';
+      tvSubEl.textContent = 'Tela aberta e conectada agora. Último sinal há ' + seg + 's ('
+        + horaCompleta(ts) + '): a TV avisa a cada 15s, e mais espaçado quando o navegador'
+        + ' trata a aba como segundo plano.';
       return;
     }
     const ultimo = Math.max(ts, tvUltimo || 0);
@@ -1615,6 +2019,20 @@ function iniciarMonitor() {
   });
 
   // áudio da TV: último relatório publicado por ela (ver registrarStatus)
+  // "Mozilla/5.0 (Windows NT 10.0...) ... Edg/140.0" -> "Edge 140 · Windows"
+  function navegadorCurto(ua) {
+    const nomes = [[/Tizen[ \/](\d+)/, 'navegador da TV (Tizen)'], [/Web[O0]S/i, 'navegador da TV (webOS)'],
+      [/Edg\/(\d+)/, 'Edge'], [/OPR\/(\d+)/, 'Opera'], [/Firefox\/(\d+)/, 'Firefox'],
+      [/SamsungBrowser\/(\d+)/, 'Samsung Internet'], [/YaBrowser\/(\d+)/, 'Yandex'],
+      [/Brave\/(\d+)/, 'Brave'], [/Chrome\/(\d+)/, 'Chrome'], [/Version\/(\d+).*Safari/, 'Safari']];
+    let nome = 'navegador desconhecido';
+    for (const [re, n] of nomes) { const m = ua.match(re); if (m) { nome = n + (m[1] ? ' ' + m[1] : ''); break; } }
+    const sist = /Tizen|Web[O0]S|SMART-TV|BRAVIA|HbbTV/i.test(ua) ? 'TV'
+      : /Windows NT 10/.test(ua) ? 'Windows 10/11' : /Windows/.test(ua) ? 'Windows'
+      : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'macOS'
+      : /Linux/.test(ua) ? 'Linux' : '';
+    return nome + (sist ? ' · ' + sist : '');
+  }
   const audioEl2 = document.getElementById('monAudio');
   const audioSubEl = document.getElementById('monAudioSub');
   db.ref(DB.tvStatus).on('value', snap => {
@@ -1627,8 +2045,10 @@ function iniciarMonitor() {
       audioEl2.className = 'v mon-bad';
       const rotuloErro = st.tipo === 'teste' ? 'Teste com som'
         : st.tipo === 'verificacao' ? 'Verificação silenciosa'
+        : st.tipo === 'recarga' ? 'Recarga da TV'
         : 'Chamado' + (st.sala ? ' · ' + st.sala : '');
       audioSubEl.textContent = rotuloErro + ' de ' + quando + ': ' + st.erro;
+      if (st.ua) audioSubEl.textContent += '\n' + navegadorCurto(st.ua);
       return;
     }
     const voz = st.fonte === 'tts' ? 'voz Google (Orus)' : 'voz do navegador';
@@ -1636,23 +2056,35 @@ function iniciarMonitor() {
     audioEl2.className = 'v ' + (st.fonte === 'tts' ? 'mon-ok' : 'mon-bad');
     const rotulo = st.tipo === 'teste' ? 'Teste com som'
       : st.tipo === 'verificacao' ? 'Verificação silenciosa'
+      : st.tipo === 'recarga' ? 'Recarga da TV'
       : 'Chamado' + (st.sala ? ' · ' + st.sala : '');
     const partes = [rotulo + ' às ' + quando];
     if (st.picoDb !== undefined) partes.push('pico ' + st.picoDb + ' dB, média ' + st.rmsDb + ' dB');
     if (st.duracao) partes.push(st.duracao + 's');
     const g = st.tipo === 'chamado' ? st.ganho : st.ganhoTeste;
     if (g) partes.push('ganho +' + g + ' dB');
+    if (st.via) partes.push('via ' + st.via);
     if (st.mudo) partes.push('TV NO MUDO');
+    if (st.liberado === false) partes.push('SOM NÃO LIBERADO NA TV');
     audioSubEl.textContent = partes.join(' · ');
+    if (st.ua) audioSubEl.textContent += '\n' + navegadorCurto(st.ua);
   });
-  document.querySelectorAll('.mon-btn').forEach(btn => {
+  document.getElementById('monVerHistorico').onclick = () => { location.href = '/historico'; };
+  document.getElementById('monRecarregar').onclick = () => {
+    if (!confirm('Recarregar a tela da TV? Se ela estiver anunciando alguém, a recarga espera a fala terminar. Depois dela, dependendo do navegador, alguém pode precisar clicar uma vez na TV pra liberar o som.')) return;
+    document.getElementById('monTesteSub').textContent = 'Pedido de recarga enviado.';
+    db.ref(DB.testeSom).set({ pedido: firebase.database.ServerValue.TIMESTAMP, acao: 'recarregar' })
+      .catch(err => { document.getElementById('monTesteSub').textContent = 'Não consegui pedir: ' + err.message; });
+  };
+  document.querySelectorAll('.mon-card .mon-btn[data-ganho]').forEach(btn => {
     btn.onclick = () => {
       const ganho = Number(btn.dataset.ganho) || 0;
       const silencioso = btn.dataset.silencioso === '1';
       // os pacientes ouvem: confirma antes, pra ninguém disparar som por engano
       if (!silencioso && !confirm('Isso vai tocar uma frase de teste no alto-falante da recepção, e os pacientes vão ouvir. Continuar?')) return;
-      document.querySelectorAll('.mon-btn').forEach(b => { b.disabled = true; });
-      setTimeout(() => document.querySelectorAll('.mon-btn').forEach(b => { b.disabled = false; }), 6000);
+      const botoes = document.querySelectorAll('.mon-btn[data-ganho]');
+      botoes.forEach(b => { b.disabled = true; });
+      setTimeout(() => botoes.forEach(b => { b.disabled = false; }), 6000);
       document.getElementById('monTesteSub').textContent = 'Pedido enviado, aguarde o resultado...';
       db.ref(DB.testeSom).set({ pedido: firebase.database.ServerValue.TIMESTAMP, ganho: ganho, silencioso: silencioso })
         .catch(err => { document.getElementById('monTesteSub').textContent = 'Não consegui pedir: ' + err.message; });
@@ -1664,7 +2096,7 @@ function iniciarMonitor() {
   function renderSalas() {
     salasEl.innerHTML = SALAS.map(nome => {
       const ts = (salas[nome] && salas[nome].ts) || 0;
-      const aberta = ts && segundosAtras(ts) < MORTA_APOS_MS / 1000;
+      const aberta = papelVivo(salas[nome]);
       if (aberta) return `<li><span class="mon-ok">${escapeHtml(nome)}</span><span class="d">aberta · sinal há ${segundosAtras(ts)}s</span></li>`;
       const ultimo = Math.max(ts, salasUltimo[nome] || 0);
       return `<li><span class="d">${escapeHtml(nome)}</span><span class="d">${ultimo ? 'fechada · última vez ' + dataHora(ultimo) : 'nunca aberta'}</span></li>`;
