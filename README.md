@@ -81,6 +81,18 @@ aqui para ativar o som" volta a aparecer na TV.
 Resolve com um clique na tela da TV, ou liberando Som (e Reprodução automática, no Edge)
 nas permissões do site, no cadeado ao lado do endereço.
 
+## Tema de outubro (Outubro Rosa)
+
+Durante todo o mês de outubro o painel troca as cores para a campanha (fundo rosa claro,
+cards brancos, detalhes em rosa) e mostra uma faixa "OUTUBRO ROSA · Faça o autoexame.
+Procure a UBS." no topo da TV, dos consultórios e da tela de escolha de sala. Em 1 de
+novembro volta ao tema normal sozinho, sem deploy: quem decide é a data da própria tela
+(`aplicarTemaSazonal`, chamada junto do relógio).
+
+São só cores e a faixa; nenhuma regra de chamada, fila, voz ou limpeza muda. Para trocar
+a frase, editar `.fc-s` no index.html (os três blocos `faixa-campanha`). O monitor e o
+histórico também ficam claros no mês, mas sem a faixa.
+
 ## Privacidade
 
 Os chamados são apagados do banco todo dia às 18h (horário de Brasília) e por

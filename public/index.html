@@ -328,6 +328,83 @@
     0%, 100% { box-shadow: 0 4px 18px rgba(255,107,107,0.15); }
     50% { box-shadow: 0 4px 28px rgba(255,107,107,0.65); }
   }
+
+  /* ---------- Outubro Rosa (tema sazonal) ----------
+     Entra e sai pela própria data da tela, em aplicarTemaSazonal(): durante outubro o
+     <html> ganha a classe tema-rosa; em 1 de novembro ela sai sozinha, sem deploy.
+     Só cores e a faixa da campanha: nenhuma regra de chamada, fila ou voz muda. */
+  html.tema-rosa{
+    --bg: #fdeff5;
+    --card: #ffffff;
+    --card-2: #fffafc;
+    --line: rgba(120,25,70,0.16);
+    --text: #1d1016;
+    --text-dim: #7c5a68;
+    --coral: #c2185b;
+    --yellow: #e91e63;
+  }
+  /* fundo claro precisa de sombra para o card não "flutuar" sem borda */
+  html.tema-rosa .main-card,
+  html.tema-rosa .history-item,
+  html.tema-rosa .empty-hist,
+  html.tema-rosa .picker-card,
+  html.tema-rosa .card,
+  html.tema-rosa .mon-card,
+  html.tema-rosa .hist-tabela { box-shadow: 0 2px 10px rgba(130,30,75,0.07); }
+  html.tema-rosa .main-card::before, html.tema-rosa .card::before { opacity: 1; }
+  /* botões de fundo rosa escuro pedem texto claro */
+  html.tema-rosa .recepcao-btn button,
+  html.tema-rosa button.primary,
+  html.tema-rosa #bloqAssumir,
+  html.tema-rosa .chip.ativo { color: #fff; }
+  /* avisos de tela cheia continuam escuros, então o texto deles vira claro */
+  html.tema-rosa #overlay, html.tema-rosa #bloqueado { background: rgba(74,8,40,0.94); color: #fff; }
+  html.tema-rosa #overlay p, html.tema-rosa #bloqueado p { color: #f3d7e4; }
+  html.tema-rosa #bloqueado h2 { color: #ffb3d1; }
+  html.tema-rosa #bloqSair { background: rgba(255,255,255,0.12); color: #fff; }
+  html.tema-rosa #diagnostico { color: #ad1457; }
+
+  /* faixa da campanha: só aparece com o tema ligado */
+  .faixa-campanha { display: none; }
+  html.tema-rosa .faixa-campanha {
+    display: flex; align-items: center; justify-content: center; gap: 22px;
+    background: linear-gradient(90deg, #ad1457, #e91e63);
+    color: #fff; padding: 16px 24px;
+  }
+  .faixa-campanha svg { flex: none; }
+  /* a tela do consultório centraliza o card com flex, então lá a faixa vai fixa no topo
+     (senão ela entra como item do flex e fica ao lado do card) */
+  html.tema-rosa #view-caller .faixa-campanha { position: fixed; top: 0; left: 0; right: 0; z-index: 2; }
+  html.tema-rosa #view-caller.active { padding: 96px 0 24px; }
+  .faixa-campanha .fc-t {
+    font-family: 'Manrope', Arial, sans-serif; font-weight: 800;
+    font-size: 30px; letter-spacing: 0.14em; line-height: 1;
+  }
+  .faixa-campanha .fc-s { font-size: 18px; opacity: 0.93; margin-top: 6px; }
+  /* 1366x768 (resolução do PC da recepção): cabeçalho não pode quebrar em duas linhas */
+  .clock .date { white-space: nowrap; }
+  @media (max-width: 1500px) {
+    .faixa-campanha .fc-t { font-size: 26px; }
+    .faixa-campanha .fc-s { font-size: 16px; }
+  }
+  /* tela baixa (TV/PC em 768px de altura): a faixa não pode empurrar o rodapé de
+     botões para fora do quadro, então tudo encolhe um pouco */
+  @media (max-height: 820px) {
+    .faixa-campanha { padding: 9px 24px; gap: 16px; }
+    .faixa-campanha svg { width: 38px; height: 54px; }
+    .faixa-campanha .fc-t { font-size: 23px; }
+    .faixa-campanha .fc-s { font-size: 15px; margin-top: 3px; }
+    .page { padding: 20px 56px; }
+    header { padding-bottom: 18px; margin-bottom: 20px; }
+    .brasao { height: 86px; }
+    .brand h1 { font-size: 26px; }
+    .main-card { min-height: 0; padding: 40px 48px; }
+    .patient-name { font-size: 68px; }
+    .history-item .nome { font-size: 30px; }
+    .history-item .sala { font-size: 19px; }
+    .operador { margin-top: 18px; padding-top: 14px; }
+    html.tema-rosa #view-caller.active { padding-top: 76px; }
+  }
 </style>
 </head>
 <body>
@@ -344,6 +421,16 @@
 
 <!-- ============ PICKER (escolha de papel, uma vez por PC) ============ -->
 <div id="view-picker" class="view">
+  <div class="faixa-campanha" aria-label="Campanha Outubro Rosa">
+    <svg viewBox="0 0 24 34" width="54" height="76" aria-hidden="true">
+      <path d="M12 9 C12 9 5.5 20 4 25.5 C3 29.2 5.5 31.5 7 30 C9 28 11 20 12 15 C13 20 15 28 17 30 C18.5 31.5 21 29.2 20 25.5 C18.5 20 12 9 12 9 Z" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M12 3 C7.5 6 7.5 12 12 15 C16.5 12 16.5 6 12 3 Z" fill="none" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/>
+    </svg>
+    <div>
+      <div class="fc-t">OUTUBRO ROSA</div>
+      <div class="fc-s">Faça o autoexame. Procure a UBS.</div>
+    </div>
+  </div>
   <div class="page">
     <header>
       <div class="brand">
@@ -372,6 +459,16 @@
 
 <!-- ============ CALLER (dentro de um consultório) ============ -->
 <div id="view-caller" class="view">
+  <div class="faixa-campanha" aria-label="Campanha Outubro Rosa">
+    <svg viewBox="0 0 24 34" width="54" height="76" aria-hidden="true">
+      <path d="M12 9 C12 9 5.5 20 4 25.5 C3 29.2 5.5 31.5 7 30 C9 28 11 20 12 15 C13 20 15 28 17 30 C18.5 31.5 21 29.2 20 25.5 C18.5 20 12 9 12 9 Z" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M12 3 C7.5 6 7.5 12 12 15 C16.5 12 16.5 6 12 3 Z" fill="none" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/>
+    </svg>
+    <div>
+      <div class="fc-t">OUTUBRO ROSA</div>
+      <div class="fc-s">Faça o autoexame. Procure a UBS.</div>
+    </div>
+  </div>
   <div class="card">
     <div class="sub">PAINEL DE CHAMADA</div>
     <h1 id="salaAtual"></h1>
@@ -395,6 +492,16 @@
   <div id="overlay">
     <h2>Clique aqui para ativar o som</h2>
     <p>Necessário uma vez para o navegador liberar a fala em voz alta.</p>
+  </div>
+  <div class="faixa-campanha" aria-label="Campanha Outubro Rosa">
+    <svg viewBox="0 0 24 34" width="54" height="76" aria-hidden="true">
+      <path d="M12 9 C12 9 5.5 20 4 25.5 C3 29.2 5.5 31.5 7 30 C9 28 11 20 12 15 C13 20 15 28 17 30 C18.5 31.5 21 29.2 20 25.5 C18.5 20 12 9 12 9 Z" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
+      <path d="M12 3 C7.5 6 7.5 12 12 15 C16.5 12 16.5 6 12 3 Z" fill="none" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/>
+    </svg>
+    <div>
+      <div class="fc-t">OUTUBRO ROSA</div>
+      <div class="fc-s">Faça o autoexame. Procure a UBS.</div>
+    </div>
   </div>
   <div class="page">
     <header>
@@ -834,9 +941,17 @@ function vigiarVersao(podeRecarregar) {
   });
 }
 
+
+// tema sazonal: durante outubro o painel usa as cores da campanha (ver .tema-rosa no CSS).
+// Roda junto do relógio, então a virada de 31/10 para 1/11 acontece sozinha, sem deploy.
+function aplicarTemaSazonal(agora) {
+  const outubro = (agora || new Date()).getMonth() === 9;
+  document.documentElement.classList.toggle('tema-rosa', outubro);
+}
 // relógio do cabeçalho (TV e tela de escolha de sala)
 function atualizarRelogio() {
   const agora = new Date();
+  aplicarTemaSazonal(agora);
   const hora = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   const data = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
   document.querySelectorAll('.js-hora').forEach(el => { el.textContent = hora; });
