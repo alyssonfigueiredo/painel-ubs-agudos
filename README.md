@@ -29,6 +29,21 @@ Abrir o endereço da sala já entra nela sem clicar. F5 mantém a sala; uma aba 
 Botões do rodapé (para quem opera): Silenciar voz · Limpar chamados · Trocar tela / sala.
 Tecla `D` na TV mostra/esconde o diagnóstico; no console, `painelLog()` lista o histórico.
 
+### Escolher de longe qual PC é a recepção
+
+Todo PC/aba que já abriu `/recepcao` se cadastra (navegador + hora do último sinal) e
+aparece no `/monitor`, no card "Dispositivos que já abriram a recepção", com um botão
+"Tornar ativo" em cada um. Útil quando um PC esquecido fica assumindo o papel sozinho
+(outra aba aberta em algum lugar, por exemplo): dá pra ver qual é e mandar o certo
+assumir, sem precisar estar na frente dele. A tela escolhida assume na hora; a que
+estava ativa vira espelho sozinha, do mesmo jeito que aconteceria clicando "Assumir
+nesta tela" localmente.
+
+> Precisa que as regras do Firebase (Realtime Database) permitam escrita em
+> `painel/recepcao_dispositivos` e `painel/recepcao_forcar`, do mesmo jeito que já
+> permitem em `painel/teste_som` — sem isso o cadastro falha silenciosamente (a TV
+> continua funcionando normal, só esse card fica vazio).
+
 ## Consultórios
 
 Digitar o nome, Enter ou "Chamar". A TV anuncia 2x. Pode chamar mesmo com a TV
@@ -49,8 +64,10 @@ hora, nome e sala. Os chips filtram por sala e mostram quantos chamados cada uma
 nada, não entra na trava de papel e não interfere na TV. O monitor tem um botão que leva
 até lá e o histórico tem um de volta.
 
-Como o banco guarda apenas o dia, a lista esvazia às 18h e quando alguém usa
-"Limpar chamados".
+A lista mostra só hoje (filtra por data), mas o banco guarda os últimos 3 dias de
+chamados — dá pra checar o funcionamento sem esperar virar o dia. A limpeza
+automática das 18h apaga só o que passou de 3 dias; "Limpar chamados" apaga tudo
+na hora, nas duas situações.
 
 ## Diagnóstico de som à distância
 
@@ -95,8 +112,10 @@ histórico também ficam claros no mês, mas sem a faixa.
 
 ## Privacidade
 
-Os chamados são apagados do banco todo dia às 18h (horário de Brasília) e por
-"Limpar chamados" em qualquer tela. Nada fica guardado além do dia.
+Os chamados ficam guardados no banco por até 3 dias (RETENCAO_DIAS em
+src/worker.js): todo dia às 18h (horário de Brasília) o que passou desse prazo é
+apagado, e "Limpar chamados" em qualquer tela apaga tudo na hora. Nome de
+paciente não fica guardado além desse prazo.
 
 ## Deploy
 
