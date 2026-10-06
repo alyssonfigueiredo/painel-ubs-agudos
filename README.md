@@ -29,6 +29,21 @@ Abrir o endereço da sala já entra nela sem clicar. F5 mantém a sala; uma aba 
 Botões do rodapé (para quem opera): Silenciar voz · Limpar chamados · Trocar tela / sala.
 Tecla `D` na TV mostra/esconde o diagnóstico; no console, `painelLog()` lista o histórico.
 
+### Escolher de longe qual PC é a recepção
+
+Todo PC/aba que já abriu `/recepcao` se cadastra (navegador + hora do último sinal) e
+aparece no `/monitor`, no card "Dispositivos que já abriram a recepção", com um botão
+"Tornar ativo" em cada um. Útil quando um PC esquecido fica assumindo o papel sozinho
+(outra aba aberta em algum lugar, por exemplo): dá pra ver qual é e mandar o certo
+assumir, sem precisar estar na frente dele. A tela escolhida assume na hora; a que
+estava ativa vira espelho sozinha, do mesmo jeito que aconteceria clicando "Assumir
+nesta tela" localmente.
+
+> Precisa que as regras do Firebase (Realtime Database) permitam escrita em
+> `painel/recepcao_dispositivos` e `painel/recepcao_forcar`, do mesmo jeito que já
+> permitem em `painel/teste_som` — sem isso o cadastro falha silenciosamente (a TV
+> continua funcionando normal, só esse card fica vazio).
+
 ## Consultórios
 
 Digitar o nome, Enter ou "Chamar". A TV anuncia 2x. Pode chamar mesmo com a TV

@@ -602,6 +602,13 @@
           <div class="sub3" id="monTvSub"></div>
         </div>
         <div class="mon-card">
+          <div class="t">DISPOSITIVOS QUE JÁ ABRIRAM A RECEPÇÃO</div>
+          <ul class="mon-lista" id="monDispositivos"><li>…</li></ul>
+          <div class="mon-nota">Dá pra escolher de longe qual PC vira a recepção — útil quando um
+            esquecido fica assumindo o papel sozinho. A tela escolhida assume na hora; a que estava
+            ativa vira espelho sozinha.</div>
+        </div>
+        <div class="mon-card">
           <div class="t">FALANDO AGORA</div>
           <div class="v" id="monFalando">…</div>
           <div class="sub3">"Sim" só enquanto a TV está anunciando um nome (alguns segundos).</div>
@@ -751,7 +758,12 @@ const DB = {
   tvStatus: 'painel/tv_status',
   testeSom: 'painel/teste_som',
   tvUltimoSinal: 'painel/tv_ultimo_sinal',
-  salasUltimoSinal: 'painel/salas_ultimo_sinal'
+  salasUltimoSinal: 'painel/salas_ultimo_sinal',
+  // cadastro de todo PC/aba que já abriu /recepcao (chave = id fixo do aparelho, em
+  // localStorage) e o pedido de forçar um deles a assumir — ver "escolher o dispositivo
+  // da recepção de longe" em iniciarRecepcao() e no /monitor
+  recepcaoDispositivos: 'painel/recepcao_dispositivos',
+  recepcaoForcar: 'painel/recepcao_forcar'
 };
 
 // Voz da recepção: PRINCIPAL é a Google Cloud TTS (masculina "Orus", Chirp 3 HD), gerada
@@ -880,6 +892,35 @@ function idDestaAba() {
     try { sessionStorage.setItem('id_aba', id); } catch (e) {}
   }
   return id;
+}
+
+// id FIXO do aparelho (localStorage, sobrevive a fechar a aba/reiniciar o PC) — usado só
+// pra "escolher de longe qual PC assume a recepção" (ver recepcaoDispositivos/recepcaoForcar
+// em iniciarRecepcao). Independente do id_aba acima, que é por aba e troca a cada sessão.
+function idDesteAparelho() {
+  let id = null;
+  try { id = localStorage.getItem('id_aparelho_recepcao'); } catch (e) {}
+  if (!id) {
+    id = Math.random().toString(36).slice(2) + '-' + Date.now();
+    try { localStorage.setItem('id_aparelho_recepcao', id); } catch (e) {}
+  }
+  return id;
+}
+
+// "Mozilla/5.0 (Windows NT 10.0...) ... Edg/140.0" -> "Edge 140 · Windows". Usado no
+// relatório de áudio, no cadastro de dispositivos da recepção e no /monitor.
+function navegadorCurto(ua) {
+  const nomes = [[/Tizen[ \/](\d+)/, 'navegador da TV (Tizen)'], [/Web[O0]S/i, 'navegador da TV (webOS)'],
+    [/Edg\/(\d+)/, 'Edge'], [/OPR\/(\d+)/, 'Opera'], [/Firefox\/(\d+)/, 'Firefox'],
+    [/SamsungBrowser\/(\d+)/, 'Samsung Internet'], [/YaBrowser\/(\d+)/, 'Yandex'],
+    [/Brave\/(\d+)/, 'Brave'], [/Chrome\/(\d+)/, 'Chrome'], [/Version\/(\d+).*Safari/, 'Safari']];
+  let nome = 'navegador desconhecido';
+  for (const [re, n] of nomes) { const m = ua.match(re); if (m) { nome = n + (m[1] ? ' ' + m[1] : ''); break; } }
+  const sist = /Tizen|Web[O0]S|SMART-TV|BRAVIA|HbbTV/i.test(ua) ? 'TV'
+    : /Windows NT 10/.test(ua) ? 'Windows 10/11' : /Windows/.test(ua) ? 'Windows'
+    : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'macOS'
+    : /Linux/.test(ua) ? 'Linux' : '';
+  return nome + (sist ? ' · ' + sist : '');
 }
 
 // aoMudar(ativa, registroDaOutra) é chamado ao assumir e ao ser bloqueada
@@ -1550,6 +1591,36 @@ function iniciarRecepcao() {
     }, dados)).catch(() => {});
   }
 
+  // Cadastro de dispositivos + "forçar de longe": todo PC/aba que já abriu /recepcao se
+  // anota em recepcaoDispositivos (id fixo por aparelho, em localStorage). O /monitor lista
+  // esses aparelhos e pode escrever em recepcaoForcar o id de qual deve assumir — é assim
+  // que dá pra escolher remotamente qual PC vira a recepção, sem precisar estar na frente
+  // dele (útil quando um PC esquecido fica "roubando" o papel: vê-se o navegador/hora de
+  // cada um e manda o certo assumir).
+  const idAparelho = idDesteAparelho();
+  function anotarDispositivo() {
+    db.ref(DB.recepcaoDispositivos + '/' + idAparelho).set({
+      ua: NAVEGADOR, ts: firebase.database.ServerValue.TIMESTAMP
+    }).catch(() => {});
+  }
+  anotarDispositivo();
+  setInterval(anotarDispositivo, BATIMENTO_MS);
+  let ultimoForcar = 0;
+  let primeiraLeituraForcar = true;
+  db.ref(DB.recepcaoForcar).on('value', snap => {
+    const p = snap.val();
+    // o que já estava gravado quando esta tela abriu não é um pedido novo: só anota,
+    // senão TODO carregamento repetiria o último "forçar" de qualquer dia anterior
+    if (primeiraLeituraForcar) {
+      primeiraLeituraForcar = false;
+      if (p && p.ts) ultimoForcar = p.ts;
+      return;
+    }
+    if (!p || !p.id || !p.ts || p.ts <= ultimoForcar) return;
+    ultimoForcar = p.ts;
+    if (p.id === idAparelho) trava.assumir();
+  });
+
   // texto pra FALA (a tela continua em maiúsculas): nome todo em maiúsculas o TTS lê
   // como sigla, soletrando; "01" vira "zero um". Ajusta só o que vai pra voz.
   function paraFala(texto) {
@@ -2019,6 +2090,37 @@ function iniciarMonitor() {
   db.ref(DB.tvUltimoSinal).on('value', snap => { tvUltimo = snap.val(); renderTv(); });
   setInterval(renderTv, 1000);
 
+  // dispositivos que já abriram /recepcao (ver anotarDispositivo em iniciarRecepcao) —
+  // dá pra forçar de longe qual deles assume, escrevendo em recepcaoForcar
+  const dispositivosEl = document.getElementById('monDispositivos');
+  const DISPOSITIVO_MAX_IDADE_MS = 14 * 24 * 60 * 60 * 1000; // esconde aparelho sumido há mais de 14 dias
+  let dispositivos = {};
+  function renderDispositivos() {
+    const agora = agoraServidor();
+    const linhas = Object.entries(dispositivos)
+      .filter(([, d]) => d && d.ts && (agora - d.ts) < DISPOSITIVO_MAX_IDADE_MS)
+      .sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0));
+    if (!linhas.length) { dispositivosEl.innerHTML = '<li><span class="d">Nenhum ainda.</span></li>'; return; }
+    dispositivosEl.innerHTML = linhas.map(([id, d]) => {
+      const vivo = segundosAtras(d.ts) < MORTA_APOS_MS / 1000;
+      const quando = vivo ? 'ativo agora' : 'último sinal ' + dataHora(d.ts);
+      return '<li><span>' + escapeHtml(navegadorCurto(d.ua || '')) +
+        '<span class="d"> · ' + quando + '</span></span>' +
+        '<button class="mon-btn" data-forcar="' + escapeHtml(id) + '">📡 Tornar ativo</button></li>';
+    }).join('');
+    dispositivosEl.querySelectorAll('[data-forcar]').forEach(btn => {
+      btn.onclick = () => {
+        if (!confirm('Fazer este dispositivo assumir a recepção agora? O que estiver ativo vira espelho sozinho.')) return;
+        btn.disabled = true;
+        db.ref(DB.recepcaoForcar).set({ id: btn.dataset.forcar, ts: firebase.database.ServerValue.TIMESTAMP })
+          .catch(err => alert('Não consegui pedir: ' + err.message))
+          .then(() => setTimeout(() => { btn.disabled = false; }, 3000));
+      };
+    });
+  }
+  db.ref(DB.recepcaoDispositivos).on('value', snap => { dispositivos = snap.val() || {}; renderDispositivos(); });
+  setInterval(renderDispositivos, 15000);
+
   let falandoTv = false;
   let noAr = null;
   function renderFalando() {
@@ -2040,21 +2142,6 @@ function iniciarMonitor() {
     limpezaEl.textContent = quando + ' · ' + tipo;
   });
 
-  // áudio da TV: último relatório publicado por ela (ver registrarStatus)
-  // "Mozilla/5.0 (Windows NT 10.0...) ... Edg/140.0" -> "Edge 140 · Windows"
-  function navegadorCurto(ua) {
-    const nomes = [[/Tizen[ \/](\d+)/, 'navegador da TV (Tizen)'], [/Web[O0]S/i, 'navegador da TV (webOS)'],
-      [/Edg\/(\d+)/, 'Edge'], [/OPR\/(\d+)/, 'Opera'], [/Firefox\/(\d+)/, 'Firefox'],
-      [/SamsungBrowser\/(\d+)/, 'Samsung Internet'], [/YaBrowser\/(\d+)/, 'Yandex'],
-      [/Brave\/(\d+)/, 'Brave'], [/Chrome\/(\d+)/, 'Chrome'], [/Version\/(\d+).*Safari/, 'Safari']];
-    let nome = 'navegador desconhecido';
-    for (const [re, n] of nomes) { const m = ua.match(re); if (m) { nome = n + (m[1] ? ' ' + m[1] : ''); break; } }
-    const sist = /Tizen|Web[O0]S|SMART-TV|BRAVIA|HbbTV/i.test(ua) ? 'TV'
-      : /Windows NT 10/.test(ua) ? 'Windows 10/11' : /Windows/.test(ua) ? 'Windows'
-      : /Android/.test(ua) ? 'Android' : /Mac OS X/.test(ua) ? 'macOS'
-      : /Linux/.test(ua) ? 'Linux' : '';
-    return nome + (sist ? ' · ' + sist : '');
-  }
   const audioEl2 = document.getElementById('monAudio');
   const audioSubEl = document.getElementById('monAudioSub');
   db.ref(DB.tvStatus).on('value', snap => {
