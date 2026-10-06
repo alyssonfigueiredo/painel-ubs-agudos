@@ -826,6 +826,7 @@ function init() {
   const papel = daUrl || papelSalvo(); // 'recepcao' ou nome de uma sala
   // monitor e histórico são telas de consulta: não viram o papel da aba
   if (daUrl && daUrl !== 'monitor' && daUrl !== 'historico') guardarPapel(daUrl);
+  aplicarTemaSazonal(); // o papel acabou de ser definido: não espera o próximo tick do relógio (até 30s)
   if (papel === 'historico') {
     definirTitulo('Histórico de hoje');
     mostrarView('historico');
@@ -980,9 +981,13 @@ function vigiarVersao(podeRecarregar) {
 
 // tema sazonal: durante outubro o painel usa as cores da campanha (ver .tema-rosa no CSS).
 // Roda junto do relógio, então a virada de 31/10 para 1/11 acontece sozinha, sem deploy.
+// Por enquanto só liga no Consultório 01, pra doutora testar antes de valer pras outras
+// salas — tirar esse filtro (TEMA_SAZONAL_RESTRITO_A) quando for liberar geral.
+const TEMA_SAZONAL_RESTRITO_A = 'Consultório 01';
 function aplicarTemaSazonal(agora) {
   const outubro = (agora || new Date()).getMonth() === 9;
-  document.documentElement.classList.toggle('tema-rosa', outubro);
+  const salaLiberada = !TEMA_SAZONAL_RESTRITO_A || papelSalvo() === TEMA_SAZONAL_RESTRITO_A;
+  document.documentElement.classList.toggle('tema-rosa', outubro && salaLiberada);
 }
 // relógio do cabeçalho (TV e tela de escolha de sala)
 function atualizarRelogio() {
