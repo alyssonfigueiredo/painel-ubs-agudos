@@ -830,7 +830,16 @@ function iniciarQuandoSouberAHora() {
 // ninguém mais aberto), a tela assume. O id da tela fica em sessionStorage: um F5 na
 // mesma aba mantém o id, então a tela reconhece a si mesma e segue ativa.
 const BATIMENTO_MS = 15000;
-const MORTA_APOS_MS = 45000; // 3 batimentos perdidos
+// O Firebase apaga o registro da trava assim que a tela cai (onDisconnect), então o
+// registro EXISTIR já quer dizer "aquela tela está conectada agora". Por isso quem decide
+// se a TV está viva é a existência do registro, não a idade do batimento: navegador
+// espaça os timers de aba que ele considera em segundo plano (chega a 1 por minuto), e era
+// por isso que a TV aparecia "inativa" no /monitor sem ter caído nada.
+const MORTA_APOS_MS = 150000;        // só na CARGA: registro parado há mais que isso é órfão
+const SEM_SINAL_LIMITE_MS = 600000;  // 10 min sem nenhum batimento: aí sim está morta
+function papelVivo(val) {
+  return !!(val && val.id && (agoraServidor() - (val.ts || 0)) < SEM_SINAL_LIMITE_MS);
+}
 let offsetServidor = 0; // relógio do PC pode estar errado; compara ts com a hora do servidor
 db.ref('.info/serverTimeOffset').on('value', snap => { offsetServidor = snap.val() || 0; });
 function agoraServidor() { return Date.now() + offsetServidor; }
@@ -853,6 +862,7 @@ function travaDePapel(ref, aoMudar, refUltimoSinal) {
   let batimento = null;
   function gravar() {
     ref.set({ id: meuId, ts: firebase.database.ServerValue.TIMESTAMP });
+    ref.onDisconnect().remove();  // reconexão descarta o onDisconnect antigo; registra de novo
     // fica no banco depois que a tela some (só informativo; se a regra faltar, ignora)
     if (refUltimoSinal) refUltimoSinal.set(firebase.database.ServerValue.TIMESTAMP).catch(() => {});
   }
@@ -888,10 +898,21 @@ function travaDePapel(ref, aoMudar, refUltimoSinal) {
     if (ativa && val && val.id && val.id !== meuId) bloquear(val);
   };
   ref.on('value', escuta);
+  // Sem estes três, uma queda de rede de 2s deixava o papel "inativo" por até 15s (o
+  // Firebase apaga o registro na desconexão e só o próximo batimento o traz de volta).
+  const conexao = db.ref('.info/connected');
+  const aoReconectar = snap => { if (snap.val() && ativa) gravar(); };
+  const aoAparecer = () => { if (ativa && !document.hidden) gravar(); };
+  conexao.on('value', aoReconectar);
+  document.addEventListener('visibilitychange', aoAparecer);
+  window.addEventListener('online', aoAparecer);
   return {
     assumir,
     parar() {
       ref.off('value', escuta);
+      conexao.off('value', aoReconectar);
+      document.removeEventListener('visibilitychange', aoAparecer);
+      window.removeEventListener('online', aoAparecer);
       clearInterval(batimento);
       // o onDisconnect().remove() fica registrado de propósito: se a página navegar
       // antes deste remove() chegar, o Firebase apaga ao ver a desconexão. Sem isso,
@@ -1106,7 +1127,7 @@ function iniciarCaller(sala) {
   db.ref(DB.falando).on('value', snap => { falandoNaTv = !!snap.val(); reagendarSolta(); });
   db.ref(DB.recepcaoAtiva).on('value', snap => {
     const tv = snap.val();
-    tvViva = !!(tv && tv.ts && (agoraServidor() - tv.ts) < MORTA_APOS_MS);
+    tvViva = papelVivo(tv);
   });
   db.ref(DB.anunciando).on('value', snap => {
     const noAr = snap.val();
@@ -1943,18 +1964,19 @@ function iniciarMonitor() {
     const d = new Date(ts);
     return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   }
-  // TV: existe registro em recepcao_ativa com batimento recente (a cada 15s; morta após 45s).
-  // Quando não existe, tv_ultimo_sinal diz desde quando ela sumiu.
+  // TV: o registro em recepcao_ativa existe enquanto a tela está conectada (o Firebase o
+  // apaga na desconexão). Quando não existe, tv_ultimo_sinal diz desde quando ela sumiu.
   let tv = null;
   let tvUltimo = null;
   function renderTv() {
     const ts = (tv && tv.ts) || 0;
     const seg = ts ? segundosAtras(ts) : Infinity;
-    const viva = seg < MORTA_APOS_MS / 1000;
-    if (viva) {
+    if (papelVivo(tv)) {
       tvEl.textContent = 'TV ativa';
       tvEl.className = 'v mon-ok';
-      tvSubEl.textContent = 'Último sinal há ' + seg + 's (' + horaCompleta(ts) + '). A TV avisa a cada 15s.';
+      tvSubEl.textContent = 'Tela aberta e conectada agora. Último sinal há ' + seg + 's ('
+        + horaCompleta(ts) + '): a TV avisa a cada 15s, e mais espaçado quando o navegador'
+        + ' trata a aba como segundo plano.';
       return;
     }
     const ultimo = Math.max(ts, tvUltimo || 0);
@@ -2074,7 +2096,7 @@ function iniciarMonitor() {
   function renderSalas() {
     salasEl.innerHTML = SALAS.map(nome => {
       const ts = (salas[nome] && salas[nome].ts) || 0;
-      const aberta = ts && segundosAtras(ts) < MORTA_APOS_MS / 1000;
+      const aberta = papelVivo(salas[nome]);
       if (aberta) return `<li><span class="mon-ok">${escapeHtml(nome)}</span><span class="d">aberta · sinal há ${segundosAtras(ts)}s</span></li>`;
       const ultimo = Math.max(ts, salasUltimo[nome] || 0);
       return `<li><span class="d">${escapeHtml(nome)}</span><span class="d">${ultimo ? 'fechada · última vez ' + dataHora(ultimo) : 'nunca aberta'}</span></li>`;

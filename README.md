@@ -52,6 +52,21 @@ até lá e o histórico tem um de volta.
 Como o banco guarda apenas o dia, a lista esvazia às 18h e quando alguém usa
 "Limpar chamados".
 
+## "TV ativa" / "TV inativa" no monitor
+
+Quem decide é a existência do registro `painel/recepcao_ativa`, que o próprio Firebase
+apaga quando a tela da TV se desconecta. Então "TV ativa" significa "a tela está aberta e
+conectada agora", e não "mandou sinal nos últimos 45s" — essa regra antiga dava falso
+negativo: navegador espaça os timers de aba que considera em segundo plano (até 1 por
+minuto), e aí a TV aparecia inativa sem ter caído nada. A tela também regrava o sinal na
+hora em que a rede volta e quando a aba reaparece, para que uma queda de 2s não apareça no
+monitor. Só é considerada morta se o registro existir e estiver sem batimento há 10 min.
+
+Se mesmo assim aparecer inativa com frequência, o problema é fora do painel, nesta ordem:
+suspensão/economia de energia do PC, economia de energia da placa de rede, Wi-Fi caindo,
+e modo de eficiência do Edge. "Última vez ativa" no monitor diz a hora exata de cada
+queda, o que separa "cai e volta" de "ficou desligado".
+
 ## Diagnóstico de som à distância
 
 O `/monitor` mostra um card "Áudio da TV" com o que aconteceu na última fala: se saiu pela
