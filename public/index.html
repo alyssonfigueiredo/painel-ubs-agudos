@@ -981,13 +981,9 @@ function vigiarVersao(podeRecarregar) {
 
 // tema sazonal: durante outubro o painel usa as cores da campanha (ver .tema-rosa no CSS).
 // Roda junto do relógio, então a virada de 31/10 para 1/11 acontece sozinha, sem deploy.
-// Por enquanto só liga no Consultório 01, pra doutora testar antes de valer pras outras
-// salas — tirar esse filtro (TEMA_SAZONAL_RESTRITO_A) quando for liberar geral.
-const TEMA_SAZONAL_RESTRITO_A = 'Consultório 01';
 function aplicarTemaSazonal(agora) {
   const outubro = (agora || new Date()).getMonth() === 9;
-  const salaLiberada = !TEMA_SAZONAL_RESTRITO_A || papelSalvo() === TEMA_SAZONAL_RESTRITO_A;
-  document.documentElement.classList.toggle('tema-rosa', outubro && salaLiberada);
+  document.documentElement.classList.toggle('tema-rosa', outubro);
 }
 // relógio do cabeçalho (TV e tela de escolha de sala)
 function atualizarRelogio() {
