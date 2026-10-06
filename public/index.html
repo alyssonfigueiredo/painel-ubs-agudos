@@ -1000,7 +1000,7 @@ setInterval(atualizarRelogio, 30000);
 // botão "Limpar chamados" (TV e consultórios): apaga TODOS os chamados do banco, o
 // mesmo que a limpeza automática das 18h. Toda tela aberta some com os nomes na hora.
 function limparChamados() {
-  if (!confirm('Apagar todos os chamados de hoje em todas as telas?')) return;
+  if (!confirm('Apagar todos os chamados guardados (até 3 dias) em todas as telas?')) return;
   db.ref(DB.chamadas).remove()
     .then(() => db.ref(DB.limpeza).set({
       ts: firebase.database.ServerValue.TIMESTAMP,
@@ -1874,8 +1874,9 @@ function iniciarRecepcao() {
 
 // ---------------- histórico do dia: só leitura ----------------
 // /historico — lista tudo que foi chamado hoje, com filtro por sala. Não grava nada,
-// não entra na trava de papel e não interfere na TV. O banco guarda só o dia: às 18h
-// (ou no botão "Limpar chamados") tudo é apagado e esta tela esvazia junto.
+// não entra na trava de papel e não interfere na TV. O banco guarda os últimos
+// RETENCAO_DIAS dias (ver worker.js), mas esta tela só mostra hoje: filtra por data
+// além de buscar os chamados mais recentes.
 function iniciarHistorico() {
   const chipsEl = document.getElementById('histChips');
   const listaEl = document.getElementById('histLista');
@@ -1885,18 +1886,24 @@ function iniciarHistorico() {
   let chamados = [];      // mais recente primeiro
   let filtro = '';        // '' = todas as salas
 
+  const inicioDeHoje = new Date(); inicioDeHoje.setHours(0, 0, 0, 0);
+  const INICIO_HOJE = inicioDeHoje.getTime();
   const hora = ts => ts ? new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--';
-  const doFiltro = () => filtro ? chamados.filter(c => c.sala === filtro) : chamados;
+  const doFiltro = () => {
+    const deHoje = chamados.filter(c => c.ts >= INICIO_HOJE);
+    return filtro ? deHoje.filter(c => c.sala === filtro) : deHoje;
+  };
 
   function renderChips() {
+    const deHoje = chamados.filter(c => c.ts >= INICIO_HOJE);
     const contagem = {};
-    chamados.forEach(c => { contagem[c.sala] = (contagem[c.sala] || 0) + 1; });
+    deHoje.forEach(c => { contagem[c.sala] = (contagem[c.sala] || 0) + 1; });
     // todas as salas primeiro, na ordem do painel; depois qualquer sala antiga que ainda apareça
     const nomes = SALAS.concat(Object.keys(contagem).filter(n => !SALAS.includes(n)).sort());
     const chip = (rotulo, valor, n) =>
       '<button class="chip' + (filtro === valor ? ' ativo' : '') + '" data-sala="' + escapeHtml(valor) + '">' +
       escapeHtml(rotulo) + (n ? '<span class="n">' + n + '</span>' : '') + '</button>';
-    chipsEl.innerHTML = chip('Todas', '', chamados.length) +
+    chipsEl.innerHTML = chip('Todas', '', deHoje.length) +
       nomes.map(n => chip(n, n, contagem[n] || 0)).join('');
     chipsEl.querySelectorAll('.chip').forEach(b => {
       b.onclick = () => { filtro = b.dataset.sala; render(); };
@@ -1916,7 +1923,7 @@ function iniciarHistorico() {
           '</div>').join('')
       : '<div class="hist-vazio">' + (chamados.length
           ? 'Nenhum chamado em ' + escapeHtml(filtro) + ' hoje.'
-          : 'Nenhum chamado hoje ainda. O histórico é apagado todo dia às 18h.') + '</div>';
+          : 'Nenhum chamado hoje ainda. Esta tela mostra só hoje; o banco guarda os últimos 3 dias.') + '</div>';
     const primeiro = itens.length ? itens[itens.length - 1] : null;
     const ultimo = itens.length ? itens[0] : null;
     resumoEl.textContent = itens.length

@@ -49,8 +49,10 @@ hora, nome e sala. Os chips filtram por sala e mostram quantos chamados cada uma
 nada, não entra na trava de papel e não interfere na TV. O monitor tem um botão que leva
 até lá e o histórico tem um de volta.
 
-Como o banco guarda apenas o dia, a lista esvazia às 18h e quando alguém usa
-"Limpar chamados".
+A lista mostra só hoje (filtra por data), mas o banco guarda os últimos 3 dias de
+chamados — dá pra checar o funcionamento sem esperar virar o dia. A limpeza
+automática das 18h apaga só o que passou de 3 dias; "Limpar chamados" apaga tudo
+na hora, nas duas situações.
 
 ## Diagnóstico de som à distância
 
@@ -95,8 +97,10 @@ histórico também ficam claros no mês, mas sem a faixa.
 
 ## Privacidade
 
-Os chamados são apagados do banco todo dia às 18h (horário de Brasília) e por
-"Limpar chamados" em qualquer tela. Nada fica guardado além do dia.
+Os chamados ficam guardados no banco por até 3 dias (RETENCAO_DIAS em
+src/worker.js): todo dia às 18h (horário de Brasília) o que passou desse prazo é
+apagado, e "Limpar chamados" em qualquer tela apaga tudo na hora. Nome de
+paciente não fica guardado além desse prazo.
 
 ## Deploy
 

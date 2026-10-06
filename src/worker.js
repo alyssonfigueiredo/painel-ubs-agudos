@@ -17,21 +17,33 @@ const TTS_GANHO_PADRAO = 0;
 const TTS_GANHO_MAX = 16;
 const TTS_CACHE_SECONDS = 60 * 60 * 24 * 30;
 
-// LIMPEZA: todo dia às 18h (horário de Brasília) apaga TODOS os chamados do banco —
-// nome de paciente não fica guardado além do dia. Agendado em wrangler.jsonc
-// (triggers.crons, em UTC: 21:00). As telas abertas escutam child_removed e limpam
-// a lista sozinhas. Teste manual: npx wrangler dev --test-scheduled e abrir
-// http://localhost:8787/__scheduled
+// LIMPEZA: todo dia às 18h (horário de Brasília) apaga os chamados com mais de
+// RETENCAO_DIAS dias — fica uma janela rolante de histórico, pra dar pra checar o
+// funcionamento em /historico e /monitor sem esperar o dia seguinte. Agendado em
+// wrangler.jsonc (triggers.crons, em UTC: 21:00). As telas abertas escutam
+// child_removed e limpam a lista sozinhas. Teste manual: npx wrangler dev
+// --test-scheduled e abrir http://localhost:8787/__scheduled
 const DB_CHAMADAS = 'https://painel-ubs-c7992-default-rtdb.firebaseio.com/chamadas.json';
 const DB_LIMPEZA = 'https://painel-ubs-c7992-default-rtdb.firebaseio.com/painel/limpeza.json';
+const RETENCAO_DIAS = 3;
 
 export default {
   async scheduled(event, env, ctx) {
-    const res = await fetch(DB_CHAMADAS, { method: 'DELETE' });
-    if (!res.ok) throw new Error('limpeza de chamadas falhou: ' + res.status + ' ' + (await res.text()).slice(0, 200));
-    console.log('limpeza diária: chamadas/ apagado');
+    const corte = Date.now() - RETENCAO_DIAS * 24 * 60 * 60 * 1000;
+    const consulta = DB_CHAMADAS + '?orderBy=%22ts%22&endAt=' + corte;
+    const busca = await fetch(consulta);
+    if (!busca.ok) throw new Error('busca de chamados antigos falhou: ' + busca.status + ' ' + (await busca.text()).slice(0, 200));
+    const antigos = await busca.json(); // { chave: {...}, ... } ou null se não tiver nada pra apagar
+    const chaves = antigos ? Object.keys(antigos) : [];
+    if (chaves.length) {
+      const remocao = {};
+      chaves.forEach(k => { remocao[k] = null; }); // PATCH com null apaga só essas chaves, preserva o resto
+      const res = await fetch(DB_CHAMADAS, { method: 'PATCH', body: JSON.stringify(remocao) });
+      if (!res.ok) throw new Error('limpeza de chamados antigos falhou: ' + res.status + ' ' + (await res.text()).slice(0, 200));
+    }
+    console.log('limpeza diária: ' + chaves.length + ' chamados com mais de ' + RETENCAO_DIAS + ' dias apagados');
     // registro informativo (aparece no /monitor); se a regra não existir, só loga
-    const reg = await fetch(DB_LIMPEZA, { method: 'PUT', body: JSON.stringify({ ts: Date.now(), tipo: 'automatica', origem: 'worker' }) });
+    const reg = await fetch(DB_LIMPEZA, { method: 'PUT', body: JSON.stringify({ ts: Date.now(), tipo: 'automatica', origem: 'worker', apagados: chaves.length }) });
     if (!reg.ok) console.warn('não gravou painel/limpeza: ' + reg.status);
   },
 
