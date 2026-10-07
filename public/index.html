@@ -923,14 +923,16 @@ function navegadorCurto(ua) {
   return nome + (sist ? ' · ' + sist : '');
 }
 
-// aoMudar(ativa, registroDaOutra) é chamado ao assumir e ao ser bloqueada
-function travaDePapel(ref, aoMudar, refUltimoSinal) {
+// aoMudar(ativa, registroDaOutra) é chamado ao assumir e ao ser bloqueada. extra (opcional)
+// é mesclado no registro gravado a cada batimento — a recepção usa pra incluir o id fixo
+// do aparelho, assim o /monitor sabe comparar "este dispositivo da lista é o ativo agora"
+function travaDePapel(ref, aoMudar, refUltimoSinal, extra) {
   const meuId = idDestaAba();
   let ativa = false;
   let decidiu = false; // "assumo ou bloqueio" é decidido UMA vez, na carga
   let batimento = null;
   function gravar() {
-    ref.set({ id: meuId, ts: firebase.database.ServerValue.TIMESTAMP });
+    ref.set(Object.assign({ id: meuId, ts: firebase.database.ServerValue.TIMESTAMP }, extra));
     // fica no banco depois que a tela some (só informativo; se a regra faltar, ignora)
     if (refUltimoSinal) refUltimoSinal.set(firebase.database.ServerValue.TIMESTAMP).catch(() => {});
   }
@@ -1276,6 +1278,9 @@ function iniciarRecepcao() {
     if (!ativaFalando) return;
     anunciandoRef.remove().catch(() => {});
   }
+  // id fixo deste aparelho (ver idDesteAparelho) — vai junto no registro da trava, pro
+  // /monitor saber qual dispositivo da lista é o ativo agora
+  const idAparelho = idDesteAparelho();
   const trava = travaDePapel(db.ref(DB.recepcaoAtiva), (ativa, outra) => {
     substituida = !ativa;
     if (ativa && !ativaFalando) {
@@ -1302,7 +1307,7 @@ function iniciarRecepcao() {
     } else {
       esconderBloqueio();
     }
-  }, db.ref(DB.tvUltimoSinal));
+  }, db.ref(DB.tvUltimoSinal), { aparelho: idAparelho });
   function sairDaRecepcao() {
     if (audioAtual) audioAtual.pause();
     if (window.speechSynthesis) speechSynthesis.cancel();
@@ -1592,12 +1597,11 @@ function iniciarRecepcao() {
   }
 
   // Cadastro de dispositivos + "forçar de longe": todo PC/aba que já abriu /recepcao se
-  // anota em recepcaoDispositivos (id fixo por aparelho, em localStorage). O /monitor lista
-  // esses aparelhos e pode escrever em recepcaoForcar o id de qual deve assumir — é assim
-  // que dá pra escolher remotamente qual PC vira a recepção, sem precisar estar na frente
-  // dele (útil quando um PC esquecido fica "roubando" o papel: vê-se o navegador/hora de
-  // cada um e manda o certo assumir).
-  const idAparelho = idDesteAparelho();
+  // anota em recepcaoDispositivos (id fixo por aparelho, em localStorage — ver idAparelho
+  // mais acima). O /monitor lista esses aparelhos e pode escrever em recepcaoForcar o id
+  // de qual deve assumir — é assim que dá pra escolher remotamente qual PC vira a
+  // recepção, sem precisar estar na frente dele (útil quando um PC esquecido fica
+  // "roubando" o papel: vê-se o navegador/hora de cada um e manda o certo assumir).
   function anotarDispositivo() {
     db.ref(DB.recepcaoDispositivos + '/' + idAparelho).set({
       ua: NAVEGADOR, ts: firebase.database.ServerValue.TIMESTAMP
@@ -2086,7 +2090,7 @@ function iniciarMonitor() {
     const h = Math.floor(min / 60);
     return h + 'h' + String(min % 60).padStart(2, '0');
   }
-  db.ref(DB.recepcaoAtiva).on('value', snap => { tv = snap.val(); renderTv(); });
+  db.ref(DB.recepcaoAtiva).on('value', snap => { tv = snap.val(); renderTv(); renderDispositivos(); });
   db.ref(DB.tvUltimoSinal).on('value', snap => { tvUltimo = snap.val(); renderTv(); });
   setInterval(renderTv, 1000);
 
@@ -2104,13 +2108,20 @@ function iniciarMonitor() {
       .filter(([, d]) => d && d.ts && (agora - d.ts) < DISPOSITIVO_MAX_IDADE_MS)
       .sort((a, b) => (ehEdge(b[1].ua) - ehEdge(a[1].ua)) || (b[1].ts || 0) - (a[1].ts || 0));
     if (!linhas.length) { dispositivosEl.innerHTML = '<li><span class="d">Nenhum ainda.</span></li>'; return; }
+    // a TV conta qual aparelho é ela (ver idAparelho em iniciarRecepcao); só confia nisso
+    // enquanto o batimento dela também estiver vivo, senão um registro velho confundiria
+    const tvViva = tv && tv.ts && segundosAtras(tv.ts) < MORTA_APOS_MS / 1000;
+    const idAtivo = tvViva ? tv.aparelho : null;
     dispositivosEl.innerHTML = linhas.map(([id, d]) => {
       const vivo = segundosAtras(d.ts) < MORTA_APOS_MS / 1000;
-      const quando = vivo ? 'ativo agora' : 'último sinal ' + dataHora(d.ts);
+      const ehAtivo = vivo && id === idAtivo;
+      const quando = ehAtivo ? 'é a recepção ativa agora' : vivo ? 'ativo agora' : 'último sinal ' + dataHora(d.ts);
       const selo = ehEdge(d.ua) ? ' <span class="mon-ok">⭐ provável oficial</span>' : '';
+      const botao = ehAtivo
+        ? '<button class="mon-btn" disabled>✓ já é o ativo</button>'
+        : '<button class="mon-btn" data-forcar="' + escapeHtml(id) + '">📡 Tornar ativo</button>';
       return '<li><span>' + escapeHtml(navegadorCurto(d.ua || '')) + selo +
-        '<span class="d"> · ' + quando + '</span></span>' +
-        '<button class="mon-btn" data-forcar="' + escapeHtml(id) + '">📡 Tornar ativo</button></li>';
+        '<span class="d"> · ' + quando + '</span></span>' + botao + '</li>';
     }).join('');
     dispositivosEl.querySelectorAll('[data-forcar]').forEach(btn => {
       btn.onclick = () => {
