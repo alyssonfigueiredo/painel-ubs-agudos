@@ -923,10 +923,14 @@ function navegadorCurto(ua) {
   return nome + (sist ? ' · ' + sist : '');
 }
 
-// aoMudar(ativa, registroDaOutra) é chamado ao assumir e ao ser bloqueada. extra (opcional)
-// é mesclado no registro gravado a cada batimento — a recepção usa pra incluir o id fixo
-// do aparelho, assim o /monitor sabe comparar "este dispositivo da lista é o ativo agora"
-function travaDePapel(ref, aoMudar, refUltimoSinal, extra) {
+// aoMudar(ativa, registroDaOutra) é chamado ao assumir, ao ser bloqueada, e — quando
+// confirmarAntes existe e devolve true — com ativa='confirmar' no lugar de assumir
+// sozinha (ver uso na recepção: só o Edge configurado assume automaticamente; qualquer
+// outro navegador que abra sem ninguém ativo pede confirmação antes, pra não "roubar" a
+// recepção por engano se a TV de verdade cair um instante). extra (opcional) é mesclado
+// no registro gravado a cada batimento — a recepção usa pra incluir o id fixo do
+// aparelho, assim o /monitor sabe comparar "este dispositivo da lista é o ativo agora"
+function travaDePapel(ref, aoMudar, refUltimoSinal, extra, confirmarAntes) {
   const meuId = idDestaAba();
   let ativa = false;
   let decidiu = false; // "assumo ou bloqueio" é decidido UMA vez, na carga
@@ -961,7 +965,11 @@ function travaDePapel(ref, aoMudar, refUltimoSinal, extra) {
     const val = snap.val();
     if (!decidiu) {
       decidiu = true;
-      if (outraViva(val)) bloquear(val); else assumir();
+      if (outraViva(val)) { bloquear(val); return; }
+      // reconectando como quem já era o ativo (F5, deploy): não é um "roubo" novo, não pede confirmação
+      const mesmaSessaoDeAntes = val && val.id === meuId;
+      if (!mesmaSessaoDeAntes && confirmarAntes && confirmarAntes()) { aoMudar('confirmar', val); return; }
+      assumir();
       return;
     }
     // alguém clicou "assumir" em outra tela — cede. Bloqueada NUNCA volta sozinha.
@@ -1281,7 +1289,19 @@ function iniciarRecepcao() {
   // id fixo deste aparelho (ver idDesteAparelho) — vai junto no registro da trava, pro
   // /monitor saber qual dispositivo da lista é o ativo agora
   const idAparelho = idDesteAparelho();
+  // só o Edge configurado pra abrir sozinho na TV deve assumir a recepção automaticamente;
+  // qualquer outro navegador (notebook esquecido, teste em outro PC...) pede confirmação
+  // antes, pra não roubar o papel da TV de verdade por um instante de queda dela
+  const ehNavegadorOficial = /Edg\//.test(navigator.userAgent || '');
   const trava = travaDePapel(db.ref(DB.recepcaoAtiva), (ativa, outra) => {
+    if (ativa === 'confirmar') {
+      substituida = true;
+      mostrarBloqueio('Confirme que esta tela deve ser a recepção',
+        'Nenhuma TV está ativa agora, e este navegador não é o Edge configurado pra abrir ' +
+        'sozinho na recepção — pode ser engano. Se for mesmo a TV, clique em "Assumir"; senão, feche esta aba.',
+        trava.assumir, sairDaRecepcao);
+      return;
+    }
     substituida = !ativa;
     if (ativa && !ativaFalando) {
       ativaFalando = true;
@@ -1307,7 +1327,7 @@ function iniciarRecepcao() {
     } else {
       esconderBloqueio();
     }
-  }, db.ref(DB.tvUltimoSinal), { aparelho: idAparelho });
+  }, db.ref(DB.tvUltimoSinal), { aparelho: idAparelho }, () => !ehNavegadorOficial);
   function sairDaRecepcao() {
     if (audioAtual) audioAtual.pause();
     if (window.speechSynthesis) speechSynthesis.cancel();
