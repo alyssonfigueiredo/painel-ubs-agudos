@@ -27,6 +27,14 @@ const DB_CHAMADAS = 'https://painel-ubs-c7992-default-rtdb.firebaseio.com/chamad
 const DB_LIMPEZA = 'https://painel-ubs-c7992-default-rtdb.firebaseio.com/painel/limpeza.json';
 const RETENCAO_DIAS = 3;
 
+// cadastro de dispositivos da recepção: passa pelo Worker (em vez do navegador escrever
+// direto no Firebase) só pra conseguir anotar o IP de quem pediu — o próprio JS do
+// navegador não tem como saber o IP dele. Ajuda a ver se um aparelho da lista está na
+// rede da UBS ou em outro lugar. NÃO distingue dois PCs diferentes NA MESMA rede: atrás
+// do mesmo roteador/NAT, todos saem com o mesmo IP público pro Cloudflare — então "mesmo
+// IP" prova "mesma rede", não "mesmo computador".
+const DB_RECEPCAO_DISPOSITIVOS = 'https://painel-ubs-c7992-default-rtdb.firebaseio.com/painel/recepcao_dispositivos';
+
 export default {
   async scheduled(event, env, ctx) {
     const corte = Date.now() - RETENCAO_DIAS * 24 * 60 * 60 * 1000;
@@ -50,6 +58,7 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.pathname === '/tts') return tts(url, env, ctx);
+    if (url.pathname === '/recepcao-registro' && request.method === 'POST') return registrarDispositivo(request);
     // versao.js muda a cada deploy: se o navegador guardasse uma cópia velha, a tela
     // recarregaria e continuaria se achando desatualizada
     if (url.pathname === '/versao.js') {
@@ -64,6 +73,24 @@ export default {
 
 function erro(status, msg) {
   return new Response(msg, { status, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
+}
+
+// chamado pela recepção a cada batimento (ver anotarDispositivo no index.html). Grava
+// ua + ip + ts em painel/recepcao_dispositivos/<id>; o id é escolhido pelo navegador
+// (localStorage, fixo por aparelho) e só serve de chave, não é segredo nenhum.
+async function registrarDispositivo(request) {
+  let corpo;
+  try { corpo = await request.json(); } catch (e) { return erro(400, 'corpo inválido'); }
+  const id = String(corpo.id || '').slice(0, 60);
+  if (!id) return erro(400, 'faltou id');
+  const ua = String(corpo.ua || '').slice(0, 160);
+  const ip = request.headers.get('CF-Connecting-IP') || '';
+  const res = await fetch(DB_RECEPCAO_DISPOSITIVOS + '/' + encodeURIComponent(id) + '.json', {
+    method: 'PUT',
+    body: JSON.stringify({ ua, ip, ts: Date.now() })
+  });
+  if (!res.ok) return erro(502, 'falha ao gravar dispositivo: ' + res.status + ' ' + (await res.text()).slice(0, 200));
+  return new Response('ok', { headers: { 'Cache-Control': 'no-store' } });
 }
 
 async function tts(url, env, ctx) {
