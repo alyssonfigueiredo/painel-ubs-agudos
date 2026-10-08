@@ -31,13 +31,19 @@ Tecla `D` na TV mostra/esconde o diagnóstico; no console, `painelLog()` lista o
 
 ### Escolher de longe qual PC é a recepção
 
-Todo PC/aba que já abriu `/recepcao` se cadastra (navegador + hora do último sinal) e
-aparece no `/monitor`, no card "Dispositivos que já abriram a recepção", com um botão
-"Tornar ativo" em cada um. Útil quando um PC esquecido fica assumindo o papel sozinho
-(outra aba aberta em algum lugar, por exemplo): dá pra ver qual é e mandar o certo
-assumir, sem precisar estar na frente dele. A tela escolhida assume na hora; a que
-estava ativa vira espelho sozinha, do mesmo jeito que aconteceria clicando "Assumir
-nesta tela" localmente.
+Todo PC/aba que já abriu `/recepcao` se cadastra (navegador, IP e hora do último sinal)
+e aparece no `/monitor`, no card "Dispositivos que já abriram a recepção", com um botão
+"Tornar ativo" em cada um (desabilitado para quem já é a recepção ativa). Útil quando um
+PC esquecido fica assumindo o papel sozinho (outra aba aberta em algum lugar, por
+exemplo): dá pra ver qual é e mandar o certo assumir, sem precisar estar na frente dele.
+A tela escolhida assume na hora; a que estava ativa vira espelho sozinha, do mesmo jeito
+que aconteceria clicando "Assumir nesta tela" localmente.
+
+O cadastro passa pelo Worker (`POST /recepcao-registro`, não escreve direto no Firebase)
+só pra conseguir anotar o IP de quem pediu — o navegador não sabe o próprio IP sozinho.
+O IP ajuda a ver se um aparelho está na rede da UBS ou em outro lugar, mas **não**
+diferencia dois PCs diferentes na mesma rede: atrás do mesmo roteador, todos saem com o
+mesmo IP público pro Cloudflare.
 
 > Precisa que as regras do Firebase (Realtime Database) permitam escrita em
 > `painel/recepcao_dispositivos` e `painel/recepcao_forcar`, do mesmo jeito que já

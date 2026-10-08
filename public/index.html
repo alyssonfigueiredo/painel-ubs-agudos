@@ -1597,14 +1597,17 @@ function iniciarRecepcao() {
   }
 
   // Cadastro de dispositivos + "forçar de longe": todo PC/aba que já abriu /recepcao se
-  // anota em recepcaoDispositivos (id fixo por aparelho, em localStorage — ver idAparelho
-  // mais acima). O /monitor lista esses aparelhos e pode escrever em recepcaoForcar o id
-  // de qual deve assumir — é assim que dá pra escolher remotamente qual PC vira a
-  // recepção, sem precisar estar na frente dele (útil quando um PC esquecido fica
-  // "roubando" o papel: vê-se o navegador/hora de cada um e manda o certo assumir).
+  // anota (id fixo por aparelho, em localStorage — ver idAparelho mais acima). O /monitor
+  // lista esses aparelhos e pode escrever em recepcaoForcar o id de qual deve assumir — é
+  // assim que dá pra escolher remotamente qual PC vira a recepção, sem precisar estar na
+  // frente dele (útil quando um PC esquecido fica "roubando" o papel: vê-se o
+  // navegador/hora/IP de cada um e manda o certo assumir).
+  // Passa pelo Worker (POST /recepcao-registro) em vez de escrever direto no Firebase só
+  // pra conseguir anotar o IP de quem pediu — o navegador não sabe o próprio IP sozinho.
   function anotarDispositivo() {
-    db.ref(DB.recepcaoDispositivos + '/' + idAparelho).set({
-      ua: NAVEGADOR, ts: firebase.database.ServerValue.TIMESTAMP
+    fetch('/recepcao-registro', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: idAparelho, ua: NAVEGADOR })
     }).catch(() => {});
   }
   anotarDispositivo();
@@ -2117,11 +2120,14 @@ function iniciarMonitor() {
       const ehAtivo = vivo && id === idAtivo;
       const quando = ehAtivo ? 'é a recepção ativa agora' : vivo ? 'ativo agora' : 'último sinal ' + dataHora(d.ts);
       const selo = ehEdge(d.ua) ? ' <span class="mon-ok">⭐ provável oficial</span>' : '';
+      // IP só prova "mesma rede" (atrás do mesmo roteador todo mundo sai igual pro
+      // Cloudflare); não dá pra diferenciar dois PCs da própria UBS com isso
+      const ipTxt = d.ip ? ' · IP ' + escapeHtml(d.ip) : '';
       const botao = ehAtivo
         ? '<button class="mon-btn" disabled>✓ já é o ativo</button>'
         : '<button class="mon-btn" data-forcar="' + escapeHtml(id) + '">📡 Tornar ativo</button>';
       return '<li><span>' + escapeHtml(navegadorCurto(d.ua || '')) + selo +
-        '<span class="d"> · ' + quando + '</span></span>' + botao + '</li>';
+        '<span class="d"> · ' + quando + ipTxt + '</span></span>' + botao + '</li>';
     }).join('');
     dispositivosEl.querySelectorAll('[data-forcar]').forEach(btn => {
       btn.onclick = () => {
