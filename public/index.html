@@ -455,6 +455,21 @@
   html.tema-rosa #bloqueado h2 { color: #ffb3d1; }
   html.tema-rosa #bloqSair { background: rgba(255,255,255,0.12); color: #fff; }
   html.tema-rosa #diagnostico { color: #ad1457; }
+  /* tela de escolha de sala: cabeçalho compacto e centralizado, sem relógio nem
+     divisória, igual ao artefato aprovado */
+  html.tema-rosa #view-picker header {
+    justify-content: center;
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-bottom: 20px;
+  }
+  html.tema-rosa #view-picker .clock { display: none; }
+  html.tema-rosa #view-picker .brasao { height: 56px; }
+  html.tema-rosa #view-picker .recepcao-btn {
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-bottom: 20px;
+  }
 
   /* faixa da campanha: só aparece com o tema ligado */
   .faixa-campanha { display: none; }
@@ -547,7 +562,7 @@
         <div class="brasao"><img src="/img/brasao.png" alt="Brasão de Agudos do Sul" onerror="this.parentNode.remove()"></div>
         <div>
           <h1>UBS Francisca de Oliveira Silva</h1>
-          <div class="sub2">PREFEITURA MUNICIPAL DE AGUDOS DO SUL · PAINEL DE CHAMADA</div>
+          <div class="sub2">PAINEL DE CHAMADA</div>
         </div>
       </div>
       <div class="clock">
