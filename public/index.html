@@ -207,7 +207,9 @@
   .label { color: var(--coral); font-weight: 700; letter-spacing: 0.1em; font-size: 15px; margin-bottom: 18px; }
   .patient-name { font-size: 80px; font-weight: 800; line-height: 1.05; margin: 0 0 14px; word-break: break-word; }
   .patient-name.empty { color: var(--text-dim); font-size: 42px; }
-  .room { font-size: 44px; color: var(--text); font-weight: 700; }
+  .patient-name.empty ~ .call-room { visibility: hidden; }
+  .compareca { color: var(--text-dim); font-size: 20px; margin-top: 18px; }
+  .room { font-size: 44px; color: var(--text); font-weight: 700; margin-top: 6px; }
   .bar { width: 64px; height: 5px; background: var(--yellow); border-radius: 3px; margin-top: 32px; }
   .repetir-btn {
     margin-top: 28px;
@@ -226,8 +228,10 @@
   .side-title { color: var(--text-dim); font-size: 14px; font-weight: 700; letter-spacing: 0.1em; margin: 0 0 16px 4px; }
   .history { display: flex; flex-direction: column; gap: 10px; }
   .history-item { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; }
+  .history-item .hist-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
   .history-item .nome { font-weight: 800; font-size: 34px; line-height: 1.15; word-break: break-word; }
-  .history-item .sala { color: var(--text-dim); font-size: 21px; margin-top: 4px; }
+  .history-item .hora { color: var(--text-dim); font-size: 18px; flex: none; }
+  .history-item .sala { color: var(--coral); font-weight: 700; font-size: 21px; margin-top: 4px; }
   .empty-hist { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px 20px; color: var(--text-dim); text-align: center; font-size: 14px; }
 
   #overlay {
@@ -334,29 +338,117 @@
      <html> ganha a classe tema-rosa; em 1 de novembro ela sai sozinha, sem deploy.
      Só cores e a faixa da campanha: nenhuma regra de chamada, fila ou voz muda. */
   html.tema-rosa{
-    --bg: #fdeff5;
-    --card: #ffffff;
-    --card-2: #fffafc;
-    --line: rgba(120,25,70,0.16);
-    --text: #1d1016;
-    --text-dim: #7c5a68;
-    --coral: #c2185b;
-    --yellow: #e91e63;
+    --bg: #2a1420;
+    --card: rgba(255,255,255,0.4);
+    --card-2: rgba(255,255,255,0.16);
+    --line: rgba(255,255,255,0.45);
+    --text: #fff;
+    --text-dim: rgba(255,255,255,0.72);
+    --coral: #ff6fa8;
+    --yellow: #ff8fc7;
   }
-  /* fundo claro precisa de sombra para o card não "flutuar" sem borda */
+  /* fundo escuro vivo com manchas de cor, no estilo "liquid glass"; os cards ficam
+     translúcidos com desfoque por cima (ver backdrop-filter abaixo) */
+  html.tema-rosa body {
+    background:
+      radial-gradient(circle at 15% 8%, rgba(255,45,138,0.22), transparent 35%),
+      radial-gradient(circle at 92% 18%, rgba(255,176,32,0.14), transparent 35%),
+      radial-gradient(circle at 25% 92%, rgba(194,81,224,0.16), transparent 35%),
+      radial-gradient(circle at 30% 15%, #4a2436 0%, #3a1c2c 55%, #2a1420 100%);
+  }
+  /* texto solto sobre o fundo vivo (fora dos cards) ganha uma sombra leve pra não se
+     perder nas manchas de cor */
+  html.tema-rosa .brand h1,
+  html.tema-rosa .clock .time,
+  html.tema-rosa .clock .date,
+  html.tema-rosa .brand .sub2,
+  html.tema-rosa .fc-t,
+  html.tema-rosa .fc-s { text-shadow: 0 1px 3px rgba(0,0,0,0.35); }
+  html.tema-rosa input[type=text] {
+    background: rgba(255,255,255,0.18);
+    border-color: rgba(255,255,255,0.4);
+  }
+  /* cards em vidro fosco: translúcidos + desfoque do que está atrás */
   html.tema-rosa .main-card,
   html.tema-rosa .history-item,
   html.tema-rosa .empty-hist,
   html.tema-rosa .picker-card,
   html.tema-rosa .card,
   html.tema-rosa .mon-card,
-  html.tema-rosa .hist-tabela { box-shadow: 0 2px 10px rgba(130,30,75,0.07); }
+  html.tema-rosa .hist-tabela {
+    backdrop-filter: blur(22px) saturate(180%);
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
+    border: 1px solid rgba(255,255,255,0.7);
+    box-shadow: inset 0 1px 1px rgba(255,255,255,0.7), 0 16px 40px rgba(140,10,60,0.16);
+  }
   html.tema-rosa .main-card::before, html.tema-rosa .card::before { opacity: 1; }
-  /* botões de fundo rosa escuro pedem texto claro */
+  /* botão de chamar / assumir / recepção: tom escuro sólido, sempre legível sobre o vidro */
   html.tema-rosa .recepcao-btn button,
   html.tema-rosa button.primary,
-  html.tema-rosa #bloqAssumir,
+  html.tema-rosa #bloqAssumir {
+    background: #4a2436;
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 16px;
+  }
   html.tema-rosa .chip.ativo { color: #fff; }
+  /* sala em destaque vira um "selo" translúcido em vez de texto solto, empurrado pra
+     base do card (nome do paciente fica ancorado no topo, cabe nome grande ou curto) */
+  html.tema-rosa .main-card { display: flex; flex-direction: column; }
+  html.tema-rosa .call-room { margin-top: auto; padding-top: 24px; }
+  html.tema-rosa .bar { display: none; }
+  /* a TV só espelha os chamados pro paciente ver; os controles de operador (repetir,
+     silenciar, limpar, trocar sala) continuam funcionando por trás, só saem da tela
+     durante a campanha pra não competir com o que o paciente precisa ler */
+  html.tema-rosa .repetir-btn,
+  html.tema-rosa .operador { display: none; }
+  /* tela do consultório: rótulo branco e centralizado, com um traço fino separando
+     do nome da sala, que também fica centralizado — igual ao painel da recepção */
+  html.tema-rosa .sub {
+    color: #fff;
+    text-align: center;
+    padding-bottom: 14px;
+    margin-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  html.tema-rosa .card h1 {
+    font-size: 34px;
+    margin: 0 0 4px;
+    text-align: center;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  }
+  /* mesma lógica da TV: controles de operador saem da tela durante a campanha */
+  html.tema-rosa .rodape-sala { display: none; }
+  html.tema-rosa .room {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 6px 18px;
+    background: rgba(255,255,255,0.6);
+    border-radius: 999px;
+    color: #600b2e;
+    font-weight: 800;
+    font-size: 30px;
+  }
+  /* brasão ganha uma sombra leve pra se destacar do fundo vivo */
+  html.tema-rosa .brasao img { filter: drop-shadow(0 4px 10px rgba(74,8,40,0.35)); }
+  /* botões secundários (rodapé, trocar sala etc.) em vidro sutil */
+  html.tema-rosa .repetir-btn,
+  html.tema-rosa .trocar-btn,
+  html.tema-rosa .operador button,
+  html.tema-rosa .mon-btn,
+  html.tema-rosa .chip {
+    background: rgba(255,255,255,0.4);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 999px;
+  }
+  html.tema-rosa .sala-btn {
+    background: rgba(255,255,255,0.14);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius: 16px;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
   /* avisos de tela cheia continuam escuros, então o texto deles vira claro */
   html.tema-rosa #overlay, html.tema-rosa #bloqueado { background: rgba(74,8,40,0.94); color: #fff; }
   html.tema-rosa #overlay p, html.tema-rosa #bloqueado p { color: #f3d7e4; }
@@ -368,14 +460,20 @@
   .faixa-campanha { display: none; }
   html.tema-rosa .faixa-campanha {
     display: flex; align-items: center; justify-content: center; gap: 22px;
-    background: linear-gradient(90deg, #c2185b, #ec6ea0);
+    background: linear-gradient(90deg, #6b1a3f, #8a2a56 55%, #a8456e);
     color: #fff; padding: 16px 24px;
+    margin: 16px 16px 0;
+    border-radius: 22px;
+    border: 1.5px solid rgba(255,255,255,0.5);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    box-shadow: inset 0 1.5px 2px rgba(255,255,255,0.5), 0 14px 32px rgba(0,0,0,0.25);
   }
   .faixa-campanha svg { flex: none; }
   /* a tela do consultório centraliza o card com flex, então lá a faixa vai fixa no topo
      (senão ela entra como item do flex e fica ao lado do card) */
-  html.tema-rosa #view-caller .faixa-campanha { position: fixed; top: 0; left: 0; right: 0; z-index: 2; }
-  html.tema-rosa #view-caller.active { padding: 96px 0 24px; }
+  html.tema-rosa #view-caller .faixa-campanha { position: fixed; top: 16px; left: 16px; right: 16px; margin: 0; z-index: 2; }
+  html.tema-rosa #view-caller.active { padding: 112px 0 24px; }
   .faixa-campanha .fc-t {
     font-family: 'Manrope', Arial, sans-serif; font-weight: 800;
     font-size: 30px; letter-spacing: 0.14em; line-height: 1;
@@ -545,7 +643,7 @@
         <div class="brasao"><img src="/img/brasao.png" alt="Brasão de Agudos do Sul" onerror="this.parentNode.remove()"></div>
         <div>
           <h1>UBS Francisca de Oliveira Silva</h1>
-          <div class="sub2">PREFEITURA MUNICIPAL DE AGUDOS DO SUL · PAINEL DE CHAMADA</div>
+          <div class="sub2">PREFEITURA MUNICIPAL DE AGUDOS DO SUL</div>
         </div>
       </div>
       <div class="clock">
@@ -557,7 +655,10 @@
       <div class="main-card">
         <div class="label">CHAMANDO</div>
         <div class="patient-name empty" id="chamandoNome">Aguardando chamada</div>
-        <div class="room" id="chamandoSala"></div>
+        <div class="call-room">
+          <div class="compareca" id="comparecaLabel">Compareça ao</div>
+          <div class="room" id="chamandoSala"></div>
+        </div>
         <div class="bar"></div>
         <button id="btnRepetir" class="repetir-btn" disabled>🔁 Repetir chamada</button>
       </div>
@@ -1896,9 +1997,10 @@ function iniciarRecepcao() {
     }
     // nome/sala vêm do banco (o médico digita, mas o banco não exige autenticação pra
     // escrever) — nunca inserir sem escapar, senão vira injeção de HTML/script na TV
-    historicoEl.innerHTML = historico.map(h =>
-      `<div class="history-item"><div class="nome">${escapeHtml(h.nome)}</div><div class="sala">${escapeHtml(h.sala)}</div></div>`
-    ).join('');
+    historicoEl.innerHTML = historico.map(h => {
+      const hora = h.ts ? new Date(h.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+      return `<div class="history-item"><div class="hist-top"><span class="nome">${escapeHtml(h.nome)}</span><span class="hora">${escapeHtml(hora)}</span></div><div class="sala">${escapeHtml(h.sala)}</div></div>`;
+    }).join('');
   }
 
   function receberChamado(snap) {
