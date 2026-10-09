@@ -396,6 +396,11 @@
   html.tema-rosa .main-card { display: flex; flex-direction: column; }
   html.tema-rosa .call-room { margin-top: auto; padding-top: 24px; }
   html.tema-rosa .bar { display: none; }
+  /* a TV só espelha os chamados pro paciente ver; os controles de operador (repetir,
+     silenciar, limpar, trocar sala) continuam funcionando por trás, só saem da tela
+     durante a campanha pra não competir com o que o paciente precisa ler */
+  html.tema-rosa .repetir-btn,
+  html.tema-rosa .operador { display: none; }
   html.tema-rosa .room {
     display: inline-block;
     margin-top: 4px;
