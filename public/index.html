@@ -207,7 +207,9 @@
   .label { color: var(--coral); font-weight: 700; letter-spacing: 0.1em; font-size: 15px; margin-bottom: 18px; }
   .patient-name { font-size: 80px; font-weight: 800; line-height: 1.05; margin: 0 0 14px; word-break: break-word; }
   .patient-name.empty { color: var(--text-dim); font-size: 42px; }
-  .room { font-size: 44px; color: var(--text); font-weight: 700; }
+  .patient-name.empty ~ .call-room { visibility: hidden; }
+  .compareca { color: var(--text-dim); font-size: 20px; margin-top: 18px; }
+  .room { font-size: 44px; color: var(--text); font-weight: 700; margin-top: 6px; }
   .bar { width: 64px; height: 5px; background: var(--yellow); border-radius: 3px; margin-top: 32px; }
   .repetir-btn {
     margin-top: 28px;
@@ -226,8 +228,10 @@
   .side-title { color: var(--text-dim); font-size: 14px; font-weight: 700; letter-spacing: 0.1em; margin: 0 0 16px 4px; }
   .history { display: flex; flex-direction: column; gap: 10px; }
   .history-item { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; }
+  .history-item .hist-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
   .history-item .nome { font-weight: 800; font-size: 34px; line-height: 1.15; word-break: break-word; }
-  .history-item .sala { color: var(--text-dim); font-size: 21px; margin-top: 4px; }
+  .history-item .hora { color: var(--text-dim); font-size: 18px; flex: none; }
+  .history-item .sala { color: var(--coral); font-weight: 700; font-size: 21px; margin-top: 4px; }
   .empty-hist { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px 20px; color: var(--text-dim); text-align: center; font-size: 14px; }
 
   #overlay {
@@ -334,24 +338,36 @@
      <html> ganha a classe tema-rosa; em 1 de novembro ela sai sozinha, sem deploy.
      Só cores e a faixa da campanha: nenhuma regra de chamada, fila ou voz muda. */
   html.tema-rosa{
-    --bg: #fdeff5;
-    --card: rgba(255,255,255,0.55);
-    --card-2: rgba(255,255,255,0.78);
-    --line: rgba(255,255,255,0.6);
-    --text: #2a0714;
-    --text-dim: #8a4a68;
-    --coral: #ad1457;
-    --yellow: #e0397e;
+    --bg: #2a1420;
+    --card: rgba(255,255,255,0.4);
+    --card-2: rgba(255,255,255,0.16);
+    --line: rgba(255,255,255,0.45);
+    --text: #fff;
+    --text-dim: rgba(255,255,255,0.72);
+    --coral: #ff6fa8;
+    --yellow: #ff8fc7;
   }
-  /* fundo vivo com manchas de cor, no estilo "liquid glass"; os cards ficam translúcidos
-     com desfoque por cima (ver backdrop-filter abaixo) */
+  /* fundo escuro vivo com manchas de cor, no estilo "liquid glass"; os cards ficam
+     translúcidos com desfoque por cima (ver backdrop-filter abaixo) */
   html.tema-rosa body {
     background:
-      radial-gradient(circle at 15% 10%, rgba(255,45,138,0.35), transparent 40%),
+      radial-gradient(circle at 15% 10%, rgba(255,45,138,0.4), transparent 40%),
       radial-gradient(circle at 90% 15%, rgba(255,176,32,0.22), transparent 38%),
-      radial-gradient(circle at 70% 90%, rgba(194,81,224,0.22), transparent 42%),
-      radial-gradient(circle at 20% 85%, rgba(255,45,138,0.18), transparent 38%),
+      radial-gradient(circle at 70% 90%, rgba(194,81,224,0.28), transparent 42%),
+      radial-gradient(circle at 20% 85%, rgba(255,45,138,0.22), transparent 38%),
       var(--bg);
+  }
+  /* texto solto sobre o fundo vivo (fora dos cards) ganha uma sombra leve pra não se
+     perder nas manchas de cor */
+  html.tema-rosa .brand h1,
+  html.tema-rosa .clock .time,
+  html.tema-rosa .clock .date,
+  html.tema-rosa .brand .sub2,
+  html.tema-rosa .fc-t,
+  html.tema-rosa .fc-s { text-shadow: 0 1px 3px rgba(0,0,0,0.35); }
+  html.tema-rosa input[type=text] {
+    background: rgba(255,255,255,0.18);
+    border-color: rgba(255,255,255,0.4);
   }
   /* cards em vidro fosco: translúcidos + desfoque do que está atrás */
   html.tema-rosa .main-card,
@@ -375,7 +391,11 @@
     color: #fff;
   }
   html.tema-rosa .chip.ativo { color: #fff; }
-  /* sala em destaque vira um "selo" translúcido em vez de texto solto */
+  /* sala em destaque vira um "selo" translúcido em vez de texto solto, empurrado pra
+     base do card (nome do paciente fica ancorado no topo, cabe nome grande ou curto) */
+  html.tema-rosa .main-card { display: flex; flex-direction: column; }
+  html.tema-rosa .call-room { margin-top: auto; padding-top: 24px; }
+  html.tema-rosa .bar { display: none; }
   html.tema-rosa .room {
     display: inline-block;
     margin-top: 4px;
@@ -384,6 +404,7 @@
     border-radius: 999px;
     color: #600b2e;
     font-weight: 800;
+    font-size: 30px;
   }
   /* brasão ganha uma sombra leve pra se destacar do fundo vivo */
   html.tema-rosa .brasao img { filter: drop-shadow(0 4px 10px rgba(74,8,40,0.35)); }
@@ -606,7 +627,10 @@
       <div class="main-card">
         <div class="label">CHAMANDO</div>
         <div class="patient-name empty" id="chamandoNome">Aguardando chamada</div>
-        <div class="room" id="chamandoSala"></div>
+        <div class="call-room">
+          <div class="compareca" id="comparecaLabel">Compareça ao</div>
+          <div class="room" id="chamandoSala"></div>
+        </div>
         <div class="bar"></div>
         <button id="btnRepetir" class="repetir-btn" disabled>🔁 Repetir chamada</button>
       </div>
@@ -1965,9 +1989,10 @@ function iniciarRecepcao() {
     }
     // nome/sala vêm do banco (o médico digita, mas o banco não exige autenticação pra
     // escrever) — nunca inserir sem escapar, senão vira injeção de HTML/script na TV
-    historicoEl.innerHTML = historico.map(h =>
-      `<div class="history-item"><div class="nome">${escapeHtml(h.nome)}</div><div class="sala">${escapeHtml(h.sala)}</div></div>`
-    ).join('');
+    historicoEl.innerHTML = historico.map(h => {
+      const hora = h.ts ? new Date(h.ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '';
+      return `<div class="history-item"><div class="hist-top"><span class="nome">${escapeHtml(h.nome)}</span><span class="hora">${escapeHtml(hora)}</span></div><div class="sala">${escapeHtml(h.sala)}</div></div>`;
+    }).join('');
   }
 
   function receberChamado(snap) {
