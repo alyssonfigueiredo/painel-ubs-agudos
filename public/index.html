@@ -902,6 +902,7 @@ const SALAS = [
   "Consultório 02",
   "Consultório 03",
   "Consultório 04",
+  "Consultório 05",
   "Odontologia",
   "Nutrição",
   "Enfermagem",
@@ -916,6 +917,7 @@ const ATALHO_URL = {
   '02': 'Consultório 02',
   '03': 'Consultório 03',
   '04': 'Consultório 04',
+  '05': 'Consultório 05', // temporário, só pra teste — ver comentário em CONSULTORIOS_MSG
   'odontologia': 'Odontologia',
   'nutricao': 'Nutrição',
   'enfermagem': 'Enfermagem',
@@ -965,7 +967,9 @@ const DB = {
 };
 
 // salas que têm o botão de mensagens (não aparece pras demais: odontologia, triagem...)
-const CONSULTORIOS_MSG = ["Consultório 01", "Consultório 02", "Consultório 03", "Consultório 04"];
+// "Consultório 05" é temporário, só pra testar mensagens com uma 5ª sala — tirar
+// (daqui, de SALAS e de ATALHO_URL) depois que o teste acabar
+const CONSULTORIOS_MSG = ["Consultório 01", "Consultório 02", "Consultório 03", "Consultório 04", "Consultório 05"];
 
 // Voz da recepção: PRINCIPAL é a Google Cloud TTS (masculina "Orus", Chirp 3 HD), gerada
 // pelo Worker em /tts (chave fica no Cloudflare). RESERVA, se o /tts falhar (cota do mês
