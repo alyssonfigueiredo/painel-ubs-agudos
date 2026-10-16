@@ -1515,9 +1515,13 @@ function iniciarMensagensConsultorios(sala) {
     if (!val || (val.de !== sala && val.para !== sala)) return;
     msgs.push({ key: snap.key, ...val });
     msgs.sort((a, b) => (a.ts || 0) - (b.ts || 0));
-    if (!overlayEl.hidden && val.de === ativo && val.para === sala) {
-      lido[ativo] = Date.now();
-      localStorage.setItem(chaveLido(ativo), String(lido[ativo]));
+    // reflete na hora: tanto a mensagem que chegou do contato ativo (e marca como lida)
+    // quanto a que EU acabei de mandar pra ele (senão só aparecia pro outro lado)
+    if (!overlayEl.hidden && daConversa(val, ativo)) {
+      if (val.de === ativo && val.para === sala) {
+        lido[ativo] = Date.now();
+        localStorage.setItem(chaveLido(ativo), String(lido[ativo]));
+      }
       renderLista();
     }
     renderContatos();
