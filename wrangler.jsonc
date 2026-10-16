@@ -16,10 +16,11 @@
     // o index.html no lugar do áudio (NotSupportedError na TV).
     "run_worker_first": true
   },
-  // limpeza diária: chamados às 18h de Brasília (21:00 UTC, retenção de 3 dias) e
-  // mensagens entre consultórios às 17h (20:00 UTC, zera tudo todo dia — ver scheduled()
-  // em src/worker.js, que decide o que fazer por event.cron)
-  "triggers": { "crons": ["0 20 * * *", "0 21 * * *"] },
+  // limpeza diária às 18h de Brasília (21:00 UTC): chamados com mais de RETENCAO_DIAS
+  // dias e, no mesmo disparo, zera as mensagens entre consultórios por inteiro (ver
+  // scheduled() em src/worker.js). Um cron só de propósito: a conta Cloudflare tem limite
+  // de 5 cron triggers no total (plano grátis), compartilhado com outros Workers.
+  "triggers": { "crons": ["0 21 * * *"] },
   "routes": [
     { "pattern": "painel-ubs.soaperando.com.br", "custom_domain": true }
   ]

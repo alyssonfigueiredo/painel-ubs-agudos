@@ -17,23 +17,22 @@ const TTS_GANHO_PADRAO = 0;
 const TTS_GANHO_MAX = 16;
 const TTS_CACHE_SECONDS = 60 * 60 * 24 * 30;
 
-// LIMPEZA: dois crons distintos (wrangler.jsonc, triggers.crons, em UTC), diferenciados
-// aqui por event.cron:
-// - 18h de Brasília (21:00 UTC): apaga os chamados com mais de RETENCAO_DIAS dias — fica
-//   uma janela rolante de histórico, pra dar pra checar o funcionamento em /historico e
-//   /monitor sem esperar o dia seguinte.
-// - 17h de Brasília (20:00 UTC): zera TODO o chat entre consultórios (sem janela, o dia
-//   seguinte começa sem as mensagens de ontem).
+// LIMPEZA: um cron só, às 18h de Brasília (21:00 UTC) — a conta Cloudflare tem limite de
+// 5 cron triggers no total (plano grátis), compartilhado com outros Workers, então os dois
+// disparos abaixo ficam juntos no mesmo horário em vez de um cron separado pra cada um:
+// - apaga os chamados com mais de RETENCAO_DIAS dias — fica uma janela rolante de
+//   histórico, pra dar pra checar o funcionamento em /historico e /monitor sem esperar o
+//   dia seguinte.
+// - zera TODO o chat entre consultórios (sem janela, o dia seguinte começa sem as
+//   mensagens de ontem).
 // As telas abertas escutam child_removed e limpam a lista sozinhas. Teste manual:
-// npx wrangler dev --test-scheduled e abrir http://localhost:8787/__scheduled?cron=...
+// npx wrangler dev --test-scheduled e abrir http://localhost:8787/__scheduled
 const DB_CHAMADAS = 'https://painel-ubs-c7992-default-rtdb.firebaseio.com/chamadas.json';
 // chat só entre os 4 consultórios (ver DB.msgsConsultorios no index.html) — zerado por
-// inteiro todo dia às 17h, não guarda janela de dias como "chamadas"
+// inteiro todo dia, não guarda janela de dias como "chamadas"
 const DB_MSGS_CONSULTORIOS = 'https://painel-ubs-c7992-default-rtdb.firebaseio.com/painel/msgs_consultorios.json';
 const DB_LIMPEZA = 'https://painel-ubs-c7992-default-rtdb.firebaseio.com/painel/limpeza.json';
 const RETENCAO_DIAS = 3;
-const CRON_MSGS = '0 20 * * *';
-const CRON_CHAMADAS = '0 21 * * *';
 
 // cadastro de dispositivos da recepção: passa pelo Worker (em vez do navegador escrever
 // direto no Firebase) só pra conseguir anotar o IP de quem pediu — o próprio JS do
@@ -45,16 +44,13 @@ const DB_RECEPCAO_DISPOSITIVOS = 'https://painel-ubs-c7992-default-rtdb.firebase
 
 export default {
   async scheduled(event, env, ctx) {
-    if (event.cron === CRON_MSGS) {
-      const apagadas = await apagarTudo(DB_MSGS_CONSULTORIOS);
-      console.log('limpeza das 17h: ' + apagadas + ' mensagens entre consultórios apagadas');
-      return;
-    }
     const corte = Date.now() - RETENCAO_DIAS * 24 * 60 * 60 * 1000;
     const apagados = await apagarAntigos(DB_CHAMADAS, corte);
-    console.log('limpeza diária: ' + apagados + ' chamados com mais de ' + RETENCAO_DIAS + ' dias apagados');
+    const apagadasMsgs = await apagarTudo(DB_MSGS_CONSULTORIOS);
+    console.log('limpeza diária: ' + apagados + ' chamados com mais de ' + RETENCAO_DIAS +
+      ' dias apagados, ' + apagadasMsgs + ' mensagens entre consultórios zeradas');
     // registro informativo (aparece no /monitor); se a regra não existir, só loga
-    const reg = await fetch(DB_LIMPEZA, { method: 'PUT', body: JSON.stringify({ ts: Date.now(), tipo: 'automatica', origem: 'worker', apagados }) });
+    const reg = await fetch(DB_LIMPEZA, { method: 'PUT', body: JSON.stringify({ ts: Date.now(), tipo: 'automatica', origem: 'worker', apagados, apagadasMsgs }) });
     if (!reg.ok) console.warn('não gravou painel/limpeza: ' + reg.status);
   },
 

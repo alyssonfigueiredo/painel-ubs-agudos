@@ -962,7 +962,7 @@ const DB = {
   recepcaoDispositivos: 'painel/recepcao_dispositivos',
   recepcaoForcar: 'painel/recepcao_forcar',
   // chat só entre os 4 consultórios (ver CONSULTORIOS_MSG); zerado por inteiro todo dia
-  // às 17h pelo Worker (ver scheduled() em src/worker.js)
+  // às 18h pelo Worker, junto com a limpeza dos chamados (ver scheduled() em src/worker.js)
   msgsConsultorios: 'painel/msgs_consultorios'
 };
 
@@ -1531,7 +1531,7 @@ function iniciarMensagensConsultorios(sala) {
     renderContatos();
     atualizarBadgePrincipal();
   }, avisarErroLeitura);
-  // mesma limpeza diária do Worker, às 17h (ver DB.msgsConsultorios)
+  // mesma limpeza diária do Worker, às 18h (ver DB.msgsConsultorios)
   msgsRef.on('child_removed', snap => {
     msgs = msgs.filter(m => m.key !== snap.key);
     if (!overlayEl.hidden) renderLista();
