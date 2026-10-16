@@ -1,0 +1,25 @@
+// Config SÓ pra testar o deploy na conta Cloudflare nova, sem tocar no domínio real
+// (painel-ubs.soaperando.com.br continua servindo pela conta atual, com wrangler.jsonc).
+// Sobe em painel-ubs-novo.<seu-usuário>.workers.dev pra testar tudo isolado antes da
+// troca de DNS. Apaga este arquivo depois que a migração terminar.
+//
+// Uso (já logado na conta NOVA):
+//   npm run deploy -- --config wrangler.test.jsonc
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "painel-ubs-novo",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-09-11",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
+  "triggers": { "crons": ["0 21 * * *"] }
+  // sem "routes": sem custom domain aqui de propósito — fica só em workers.dev até
+  // confirmar que está tudo certo, aí sim move a rota pra cá e tira daqui
+}
