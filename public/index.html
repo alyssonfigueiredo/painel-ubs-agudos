@@ -185,6 +185,15 @@
     padding: 24px;
   }
   .msgs-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .msgs-contatos { display: flex; gap: 8px; margin-bottom: 14px; }
+  .msgs-contato {
+    position: relative; flex: 1;
+    font-family: inherit; font-size: 13px; font-weight: 700;
+    padding: 10px 6px; border-radius: 12px; cursor: pointer;
+    background: transparent; color: var(--text-dim); border: 1px solid var(--line);
+  }
+  .msgs-contato.ativo { background: var(--coral); color: #21140f; border-color: var(--coral); }
+  .msgs-contato .msgs-badge { top: -6px; right: -6px; }
   .msgs-fechar {
     background: transparent; border: 1px solid var(--line); color: var(--text);
     width: 30px; height: 30px; border-radius: 10px; cursor: pointer; font-size: 14px;
@@ -445,6 +454,7 @@
   html.tema-rosa .msg-bolha.minha { background: #4a2436; color: #fff; }
   html.tema-rosa .msg-bolha.minha .msg-hora { color: rgba(255,255,255,0.65); }
   html.tema-rosa .msgs-badge { background: #fff; color: #600b2e; }
+  html.tema-rosa .msgs-contato.ativo { background: #4a2436; color: #fff; border-color: rgba(255,255,255,0.25); }
   html.tema-rosa .chip.ativo { color: #fff; }
   /* sala em destaque vira um "selo" translúcido em vez de texto solto, empurrado pra
      base do card (nome do paciente fica ancorado no topo, cabe nome grande ou curto) */
@@ -679,6 +689,7 @@
         <div class="sub" style="margin:0;padding:0;border:0;">Mensagens entre consultórios</div>
         <button class="msgs-fechar" id="msgsFechar" aria-label="Fechar">✕</button>
       </div>
+      <div class="msgs-contatos" id="msgsContatos"></div>
       <div class="msgs-lista" id="msgsLista"></div>
       <form class="msgs-compor" id="msgsForm">
         <input type="text" id="msgsInput" placeholder="Escrever mensagem…" autocomplete="off" maxlength="200">
@@ -1429,62 +1440,98 @@ function iniciarCaller(sala) {
   vigiarVersao(() => true);
 }
 
-// chat só entre os 4 consultórios (ver CONSULTORIOS_MSG): mesmo canal pras 4 salas, sem
-// escolher destinatário. "Lido até" fica só no localStorage de cada tela (não tem
-// usuário/login aqui), por isso o contador de não lidas é por aparelho, não por sala.
-const MAX_MSGS = 40;
+// chat entre os 4 consultórios (ver CONSULTORIOS_MSG), um destinatário por vez — escolhe
+// o outro consultório numa abinha antes de escrever, como conversas separadas. "Lido até"
+// fica no localStorage de cada tela, por par de salas (não tem usuário/login aqui), por
+// isso o contador de não lidas é por aparelho, não por pessoa.
+const MAX_MSGS = 80;
 function iniciarMensagensConsultorios(sala) {
   const btnEl = document.getElementById('btnMsgs');
   const badgeEl = document.getElementById('msgsBadge');
   const overlayEl = document.getElementById('msgsOverlay');
+  const contatosEl = document.getElementById('msgsContatos');
   const listaEl = document.getElementById('msgsLista');
   const formEl = document.getElementById('msgsForm');
   const inputEl = document.getElementById('msgsInput');
   const fecharEl = document.getElementById('msgsFechar');
-  const chaveLido = 'painel_msgs_lido_' + slug(sala);
-  let lido = Number(localStorage.getItem(chaveLido)) || 0;
-  let msgs = [];
+  const outros = CONSULTORIOS_MSG.filter(s => s !== sala);
+  const chaveLido = contato => 'painel_msgs_lido_' + slug(sala) + '_' + slug(contato);
+  const lido = {};
+  outros.forEach(c => { lido[c] = Number(localStorage.getItem(chaveLido(c))) || 0; });
+  let ativo = outros[0];
+  let msgs = []; // todas as mensagens que envolvem esta sala (com qualquer um dos outros)
 
+  function daConversa(m, contato) {
+    return (m.de === sala && m.para === contato) || (m.de === contato && m.para === sala);
+  }
+  function naoLidasDe(contato) {
+    return msgs.filter(m => m.de === contato && m.para === sala && m.ts > lido[contato]).length;
+  }
+  function renderContatos() {
+    contatosEl.innerHTML = outros.map(c => {
+      const n = naoLidasDe(c);
+      const numero = c.replace(/\D/g, '');
+      return `<button type="button" class="msgs-contato ${c === ativo ? 'ativo' : ''}" data-sala="${escapeHtml(c)}">` +
+        `${numero}<span class="msgs-badge" ${n === 0 ? 'hidden' : ''}>${n > 9 ? '9+' : n}</span>` +
+      `</button>`;
+    }).join('');
+    contatosEl.querySelectorAll('.msgs-contato').forEach(btn => {
+      btn.onclick = () => selecionar(btn.dataset.sala);
+    });
+  }
   function renderLista() {
-    listaEl.innerHTML = msgs.length === 0
+    const conversa = msgs.filter(m => daConversa(m, ativo));
+    listaEl.innerHTML = conversa.length === 0
       ? '<div class="msgs-vazio">Nenhuma mensagem ainda.</div>'
-      : msgs.map(m => {
+      : conversa.map(m => {
           const minha = m.de === sala;
           return `<div class="msg-bolha ${minha ? 'minha' : ''}">` +
-            `<div class="msg-de">${escapeHtml(m.de)}</div>` +
             `<div class="msg-texto">${escapeHtml(m.texto)}</div>` +
             `<div class="msg-hora">${horaDe(m.ts)}</div>` +
           `</div>`;
         }).join('');
     listaEl.scrollTop = listaEl.scrollHeight;
   }
-  function atualizarBadge() {
-    const naoLidas = msgs.filter(m => m.de !== sala && m.ts > lido).length;
-    badgeEl.textContent = naoLidas > 9 ? '9+' : String(naoLidas);
-    badgeEl.hidden = naoLidas === 0;
+  function atualizarBadgePrincipal() {
+    const total = outros.reduce((soma, c) => soma + naoLidasDe(c), 0);
+    badgeEl.textContent = total > 9 ? '9+' : String(total);
+    badgeEl.hidden = total === 0;
   }
 
   const msgsRef = db.ref(DB.msgsConsultorios).orderByChild('ts').limitToLast(MAX_MSGS);
   msgsRef.on('child_added', snap => {
     const val = snap.val();
-    if (!val) return;
+    if (!val || (val.de !== sala && val.para !== sala)) return;
     msgs.push({ key: snap.key, ...val });
     msgs.sort((a, b) => (a.ts || 0) - (b.ts || 0));
-    if (!overlayEl.hidden) renderLista(); else atualizarBadge();
+    if (!overlayEl.hidden && val.de === ativo && val.para === sala) {
+      lido[ativo] = Date.now();
+      localStorage.setItem(chaveLido(ativo), String(lido[ativo]));
+      renderLista();
+    }
+    renderContatos();
+    atualizarBadgePrincipal();
   });
-  // mesma limpeza diária de 3 dias do Worker (ver DB.msgsConsultorios)
+  // mesma limpeza diária do Worker, às 17h (ver DB.msgsConsultorios)
   msgsRef.on('child_removed', snap => {
     msgs = msgs.filter(m => m.key !== snap.key);
     if (!overlayEl.hidden) renderLista();
+    renderContatos();
+    atualizarBadgePrincipal();
   });
 
+  function selecionar(contato) {
+    ativo = contato;
+    lido[ativo] = Date.now();
+    localStorage.setItem(chaveLido(ativo), String(lido[ativo]));
+    renderContatos();
+    renderLista();
+    atualizarBadgePrincipal();
+    inputEl.focus();
+  }
   function abrir() {
     overlayEl.hidden = false;
-    renderLista();
-    lido = Date.now();
-    localStorage.setItem(chaveLido, String(lido));
-    atualizarBadge();
-    inputEl.focus();
+    selecionar(ativo);
   }
   function fechar() { overlayEl.hidden = true; }
   btnEl.hidden = false;
@@ -1495,11 +1542,13 @@ function iniciarMensagensConsultorios(sala) {
     e.preventDefault();
     const texto = inputEl.value.trim();
     if (!texto) return;
-    db.ref(DB.msgsConsultorios).push({ de: sala, texto, ts: firebase.database.ServerValue.TIMESTAMP })
+    db.ref(DB.msgsConsultorios).push({ de: sala, para: ativo, texto, ts: firebase.database.ServerValue.TIMESTAMP })
       .catch(e => alert('Não consegui enviar a mensagem (' + e.message + '). Avise quem cuida do painel.'));
     inputEl.value = '';
     inputEl.focus();
   };
+  renderContatos();
+  atualizarBadgePrincipal();
 }
 
 // ---------------- painel da recepção ----------------
