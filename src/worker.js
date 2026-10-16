@@ -17,15 +17,23 @@ const TTS_GANHO_PADRAO = 0;
 const TTS_GANHO_MAX = 16;
 const TTS_CACHE_SECONDS = 60 * 60 * 24 * 30;
 
-// LIMPEZA: todo dia às 18h (horário de Brasília) apaga os chamados com mais de
-// RETENCAO_DIAS dias — fica uma janela rolante de histórico, pra dar pra checar o
-// funcionamento em /historico e /monitor sem esperar o dia seguinte. Agendado em
-// wrangler.jsonc (triggers.crons, em UTC: 21:00). As telas abertas escutam
-// child_removed e limpam a lista sozinhas. Teste manual: npx wrangler dev
-// --test-scheduled e abrir http://localhost:8787/__scheduled
+// LIMPEZA: dois crons distintos (wrangler.jsonc, triggers.crons, em UTC), diferenciados
+// aqui por event.cron:
+// - 18h de Brasília (21:00 UTC): apaga os chamados com mais de RETENCAO_DIAS dias — fica
+//   uma janela rolante de histórico, pra dar pra checar o funcionamento em /historico e
+//   /monitor sem esperar o dia seguinte.
+// - 17h de Brasília (20:00 UTC): zera TODO o chat entre consultórios (sem janela, o dia
+//   seguinte começa sem as mensagens de ontem).
+// As telas abertas escutam child_removed e limpam a lista sozinhas. Teste manual:
+// npx wrangler dev --test-scheduled e abrir http://localhost:8787/__scheduled?cron=...
 const DB_CHAMADAS = 'https://painel-ubs-c7992-default-rtdb.firebaseio.com/chamadas.json';
+// chat só entre os 4 consultórios (ver DB.msgsConsultorios no index.html) — zerado por
+// inteiro todo dia às 17h, não guarda janela de dias como "chamadas"
+const DB_MSGS_CONSULTORIOS = 'https://painel-ubs-c7992-default-rtdb.firebaseio.com/painel/msgs_consultorios.json';
 const DB_LIMPEZA = 'https://painel-ubs-c7992-default-rtdb.firebaseio.com/painel/limpeza.json';
 const RETENCAO_DIAS = 3;
+const CRON_MSGS = '0 20 * * *';
+const CRON_CHAMADAS = '0 21 * * *';
 
 // cadastro de dispositivos da recepção: passa pelo Worker (em vez do navegador escrever
 // direto no Firebase) só pra conseguir anotar o IP de quem pediu — o próprio JS do
@@ -37,21 +45,16 @@ const DB_RECEPCAO_DISPOSITIVOS = 'https://painel-ubs-c7992-default-rtdb.firebase
 
 export default {
   async scheduled(event, env, ctx) {
-    const corte = Date.now() - RETENCAO_DIAS * 24 * 60 * 60 * 1000;
-    const consulta = DB_CHAMADAS + '?orderBy=%22ts%22&endAt=' + corte;
-    const busca = await fetch(consulta);
-    if (!busca.ok) throw new Error('busca de chamados antigos falhou: ' + busca.status + ' ' + (await busca.text()).slice(0, 200));
-    const antigos = await busca.json(); // { chave: {...}, ... } ou null se não tiver nada pra apagar
-    const chaves = antigos ? Object.keys(antigos) : [];
-    if (chaves.length) {
-      const remocao = {};
-      chaves.forEach(k => { remocao[k] = null; }); // PATCH com null apaga só essas chaves, preserva o resto
-      const res = await fetch(DB_CHAMADAS, { method: 'PATCH', body: JSON.stringify(remocao) });
-      if (!res.ok) throw new Error('limpeza de chamados antigos falhou: ' + res.status + ' ' + (await res.text()).slice(0, 200));
+    if (event.cron === CRON_MSGS) {
+      const apagadas = await apagarTudo(DB_MSGS_CONSULTORIOS);
+      console.log('limpeza das 17h: ' + apagadas + ' mensagens entre consultórios apagadas');
+      return;
     }
-    console.log('limpeza diária: ' + chaves.length + ' chamados com mais de ' + RETENCAO_DIAS + ' dias apagados');
+    const corte = Date.now() - RETENCAO_DIAS * 24 * 60 * 60 * 1000;
+    const apagados = await apagarAntigos(DB_CHAMADAS, corte);
+    console.log('limpeza diária: ' + apagados + ' chamados com mais de ' + RETENCAO_DIAS + ' dias apagados');
     // registro informativo (aparece no /monitor); se a regra não existir, só loga
-    const reg = await fetch(DB_LIMPEZA, { method: 'PUT', body: JSON.stringify({ ts: Date.now(), tipo: 'automatica', origem: 'worker', apagados: chaves.length }) });
+    const reg = await fetch(DB_LIMPEZA, { method: 'PUT', body: JSON.stringify({ ts: Date.now(), tipo: 'automatica', origem: 'worker', apagados }) });
     if (!reg.ok) console.warn('não gravou painel/limpeza: ' + reg.status);
   },
 
@@ -70,6 +73,35 @@ export default {
     return env.ASSETS.fetch(request);
   }
 };
+
+// apaga de um path só as chaves com ts <= corte, preservando o resto; devolve quantas
+// apagou. Usado tanto pra "chamadas" quanto pra "painel/msgs_consultorios".
+async function apagarAntigos(dbUrl, corte) {
+  const consulta = dbUrl + '?orderBy=%22ts%22&endAt=' + corte;
+  const busca = await fetch(consulta);
+  if (!busca.ok) throw new Error('busca de registros antigos falhou (' + dbUrl + '): ' + busca.status + ' ' + (await busca.text()).slice(0, 200));
+  const antigos = await busca.json(); // { chave: {...}, ... } ou null se não tiver nada pra apagar
+  const chaves = antigos ? Object.keys(antigos) : [];
+  if (chaves.length) {
+    const remocao = {};
+    chaves.forEach(k => { remocao[k] = null; }); // PATCH com null apaga só essas chaves
+    const res = await fetch(dbUrl, { method: 'PATCH', body: JSON.stringify(remocao) });
+    if (!res.ok) throw new Error('limpeza de registros antigos falhou (' + dbUrl + '): ' + res.status + ' ' + (await res.text()).slice(0, 200));
+  }
+  return chaves.length;
+}
+
+// zera um path inteiro (DELETE), sem filtro por data. Devolve quantas chaves apagou.
+async function apagarTudo(dbUrl) {
+  const busca = await fetch(dbUrl + '?shallow=true');
+  if (!busca.ok) throw new Error('leitura antes de zerar falhou (' + dbUrl + '): ' + busca.status + ' ' + (await busca.text()).slice(0, 200));
+  const existentes = await busca.json();
+  const total = existentes ? Object.keys(existentes).length : 0;
+  if (total === 0) return 0;
+  const res = await fetch(dbUrl, { method: 'DELETE' });
+  if (!res.ok) throw new Error('zerar path falhou (' + dbUrl + '): ' + res.status + ' ' + (await res.text()).slice(0, 200));
+  return total;
+}
 
 function erro(status, msg) {
   return new Response(msg, { status, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });

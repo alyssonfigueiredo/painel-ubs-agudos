@@ -62,6 +62,19 @@ responder, em 25s.
 Mesma sala aberta em dois PCs: a segunda fica bloqueada até alguém clicar
 "Assumir nesta tela".
 
+### Mensagens entre consultórios
+
+Só nas 4 telas de Consultório (`/01` `/02` `/03` `/04`): botão "💬 Mensagens entre
+consultórios" abaixo do histórico da sala, com contador de não lidas. É um chat único
+compartilhado pelas 4 salas (sem escolher destinatário), não aparece pras demais salas
+(odontologia, triagem etc.) nem na recepção. O "lido até" fica só no navegador de cada
+tela (`localStorage`), não é por usuário. O Worker zera o chat inteiro todo dia às 17h
+(horário de Brasília), sem guardar histórico de um dia pro outro.
+
+> Mesma observação do card de dispositivos da recepção: precisa que as regras do
+> Firebase permitam leitura/escrita em `painel/msgs_consultorios`, senão o envio falha
+> (aparece um alerta na tela avisando).
+
 ## Histórico do dia
 
 `/historico` lista tudo que foi chamado hoje, do mais recente para o mais antigo, com
@@ -122,6 +135,9 @@ Os chamados ficam guardados no banco por até 3 dias (RETENCAO_DIAS em
 src/worker.js): todo dia às 18h (horário de Brasília) o que passou desse prazo é
 apagado, e "Limpar chamados" em qualquer tela apaga tudo na hora. Nome de
 paciente não fica guardado além desse prazo.
+
+As mensagens entre consultórios são zeradas por inteiro todo dia às 17h (não guardam
+janela de dias como os chamados).
 
 ## Deploy
 
