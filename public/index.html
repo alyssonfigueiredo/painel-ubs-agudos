@@ -206,7 +206,12 @@
   .msg-bolha .msg-hora { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
   .msg-bolha.minha { align-self: flex-end; background: var(--coral); color: #21140f; }
   .msg-bolha.minha .msg-de { display: none; }
-  .msg-bolha.minha .msg-hora { color: rgba(33,20,15,0.65); }
+  .msg-bolha.minha .msg-hora { color: rgba(33,20,15,0.65); display: flex; align-items: center; gap: 6px; }
+  .msg-apagar {
+    background: transparent; border: none; cursor: pointer;
+    font-size: 12px; padding: 0; line-height: 1; opacity: 0.7;
+  }
+  .msg-apagar:active { opacity: 1; }
   .msgs-compor { display: flex; gap: 8px; margin-top: 14px; }
   .msgs-compor input {
     flex: 1; margin-bottom: 0; font-size: 15px; padding: 12px 14px;
@@ -1491,10 +1496,19 @@ function iniciarMensagensConsultorios(sala) {
           const minha = m.de === sala;
           return `<div class="msg-bolha ${minha ? 'minha' : ''}">` +
             `<div class="msg-texto">${escapeHtml(m.texto)}</div>` +
-            `<div class="msg-hora">${horaDe(m.ts)}</div>` +
+            `<div class="msg-hora">${horaDe(m.ts)}` +
+              (minha ? `<button type="button" class="msg-apagar" data-key="${m.key}" aria-label="Apagar mensagem">🗑</button>` : '') +
+            `</div>` +
           `</div>`;
         }).join('');
     listaEl.scrollTop = listaEl.scrollHeight;
+    listaEl.querySelectorAll('.msg-apagar').forEach(btn => {
+      btn.onclick = () => {
+        if (!confirm('Apagar esta mensagem?')) return;
+        db.ref(DB.msgsConsultorios + '/' + btn.dataset.key).remove()
+          .catch(e => alert('Não consegui apagar (' + e.message + ').'));
+      };
+    });
   }
   function atualizarBadgePrincipal() {
     const total = outros.reduce((soma, c) => soma + naoLidasDe(c), 0);
