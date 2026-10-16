@@ -1498,6 +1498,17 @@ function iniciarMensagensConsultorios(sala) {
     badgeEl.hidden = total === 0;
   }
 
+  // se a regra do Firebase não liberar LEITURA em painel/msgs_consultorios (só escrita,
+  // por exemplo), o .on() falha sem lançar exceção — só chama este cancelCallback. Sem
+  // ele o botão fica mudo pra sempre: parece que a mensagem "não chega" mas na verdade a
+  // tela nem consegue escutar o path.
+  let erroLeituraAvisado = false;
+  function avisarErroLeitura(e) {
+    console.error('mensagens entre consultórios: falha ao ler painel/msgs_consultorios', e);
+    if (erroLeituraAvisado) return;
+    erroLeituraAvisado = true;
+    alert('Não consigo receber mensagens dos outros consultórios aqui (' + e.message + '). Avise quem cuida do painel.');
+  }
   const msgsRef = db.ref(DB.msgsConsultorios).orderByChild('ts').limitToLast(MAX_MSGS);
   msgsRef.on('child_added', snap => {
     const val = snap.val();
@@ -1511,14 +1522,14 @@ function iniciarMensagensConsultorios(sala) {
     }
     renderContatos();
     atualizarBadgePrincipal();
-  });
+  }, avisarErroLeitura);
   // mesma limpeza diária do Worker, às 17h (ver DB.msgsConsultorios)
   msgsRef.on('child_removed', snap => {
     msgs = msgs.filter(m => m.key !== snap.key);
     if (!overlayEl.hidden) renderLista();
     renderContatos();
     atualizarBadgePrincipal();
-  });
+  }, avisarErroLeitura);
 
   function selecionar(contato) {
     ativo = contato;
