@@ -16,8 +16,10 @@
     // o index.html no lugar do áudio (NotSupportedError na TV).
     "run_worker_first": true
   },
-  // limpeza diária dos chamados às 18h de Brasília (UTC-3, sem horário de verão) = 21:00 UTC
-  "triggers": { "crons": ["0 21 * * *"] },
+  // limpeza diária: chamados às 18h de Brasília (21:00 UTC, retenção de 3 dias) e
+  // mensagens entre consultórios às 17h (20:00 UTC, zera tudo todo dia — ver scheduled()
+  // em src/worker.js, que decide o que fazer por event.cron)
+  "triggers": { "crons": ["0 20 * * *", "0 21 * * *"] },
   "routes": [
     { "pattern": "painel-ubs.soaperando.com.br", "custom_domain": true }
   ]

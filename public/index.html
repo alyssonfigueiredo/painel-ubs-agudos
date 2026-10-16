@@ -158,6 +158,55 @@
   .trocar-btn:active { background: var(--card); }
   .rodape-sala { display: flex; gap: 10px; }
   .rodape-sala .trocar-btn { width: auto; flex: 1; }
+
+  /* ---------- mensagens entre consultórios (só salas 01-04) ---------- */
+  .msgs-btn { position: relative; margin-top: 18px; }
+  .msgs-btn[hidden] { display: none; }
+  .msgs-badge {
+    position: absolute; top: -8px; right: -8px;
+    background: var(--coral); color: #21140f;
+    font-size: 12px; font-weight: 800;
+    min-width: 20px; height: 20px; padding: 0 5px;
+    border-radius: 999px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .msgs-badge[hidden] { display: none; }
+  .msgs-overlay {
+    position: fixed; inset: 0; z-index: 5;
+    background: rgba(0,0,0,0.6);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .msgs-overlay[hidden] { display: none; }
+  .msgs-panel {
+    width: 100%; max-width: 420px;
+    max-height: min(560px, 90vh);
+    display: flex; flex-direction: column;
+    padding: 24px;
+  }
+  .msgs-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .msgs-fechar {
+    background: transparent; border: 1px solid var(--line); color: var(--text);
+    width: 30px; height: 30px; border-radius: 10px; cursor: pointer; font-size: 14px;
+  }
+  .msgs-lista { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 2px; }
+  .msgs-vazio { color: var(--text-dim); font-size: 14px; text-align: center; padding: 24px 0; }
+  .msg-bolha { max-width: 85%; padding: 10px 14px; border-radius: 14px; background: var(--card-2); border: 1px solid var(--line); }
+  .msg-bolha .msg-de { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; color: var(--coral); margin-bottom: 2px; }
+  .msg-bolha .msg-texto { font-size: 15px; word-break: break-word; }
+  .msg-bolha .msg-hora { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+  .msg-bolha.minha { align-self: flex-end; background: var(--coral); color: #21140f; }
+  .msg-bolha.minha .msg-de { display: none; }
+  .msg-bolha.minha .msg-hora { color: rgba(33,20,15,0.65); }
+  .msgs-compor { display: flex; gap: 8px; margin-top: 14px; }
+  .msgs-compor input {
+    flex: 1; margin-bottom: 0; font-size: 15px; padding: 12px 14px;
+    border: 1px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--text); font-family: inherit;
+  }
+  .msgs-compor button {
+    font-family: inherit; font-weight: 700; font-size: 14px; padding: 0 18px;
+    background: var(--coral); color: #21140f; border: none; border-radius: 12px; cursor: pointer;
+  }
   .hist-sala { margin-top: 20px; }
   .hist-sala .hist-titulo { color: var(--text-dim); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; margin-bottom: 8px; }
   .hist-sala-item {
@@ -375,6 +424,7 @@
   html.tema-rosa .picker-card,
   html.tema-rosa .card,
   html.tema-rosa .mon-card,
+  html.tema-rosa .msgs-panel,
   html.tema-rosa .hist-tabela {
     backdrop-filter: blur(22px) saturate(180%);
     -webkit-backdrop-filter: blur(22px) saturate(180%);
@@ -385,12 +435,16 @@
   /* botão de chamar / assumir / recepção: tom escuro sólido, sempre legível sobre o vidro */
   html.tema-rosa .recepcao-btn button,
   html.tema-rosa button.primary,
+  html.tema-rosa .msgs-compor button,
   html.tema-rosa #bloqAssumir {
     background: #4a2436;
     color: #fff;
     border: 1px solid rgba(255,255,255,0.25);
     border-radius: 16px;
   }
+  html.tema-rosa .msg-bolha.minha { background: #4a2436; color: #fff; }
+  html.tema-rosa .msg-bolha.minha .msg-hora { color: rgba(255,255,255,0.65); }
+  html.tema-rosa .msgs-badge { background: #fff; color: #600b2e; }
   html.tema-rosa .chip.ativo { color: #fff; }
   /* sala em destaque vira um "selo" translúcido em vez de texto solto, empurrado pra
      base do card (nome do paciente fica ancorado no topo, cabe nome grande ou curto) */
@@ -613,9 +667,23 @@
     <button class="primary" id="btnChamar">Chamar</button>
     <div class="feedback" id="feedback"></div>
     <div class="hist-sala" id="historicoSala"></div>
+    <button class="trocar-btn msgs-btn" id="btnMsgs" hidden>💬 Mensagens entre consultórios<span class="msgs-badge" id="msgsBadge" hidden>0</span></button>
     <div class="rodape-sala">
       <button class="trocar-btn" id="limparCaller">🧹 Limpar chamados</button>
       <button class="trocar-btn" id="trocarSalaCaller">🔄 Trocar sala</button>
+    </div>
+  </div>
+  <div class="msgs-overlay" id="msgsOverlay" hidden>
+    <div class="card msgs-panel">
+      <div class="msgs-head">
+        <div class="sub" style="margin:0;padding:0;border:0;">Mensagens entre consultórios</div>
+        <button class="msgs-fechar" id="msgsFechar" aria-label="Fechar">✕</button>
+      </div>
+      <div class="msgs-lista" id="msgsLista"></div>
+      <form class="msgs-compor" id="msgsForm">
+        <input type="text" id="msgsInput" placeholder="Escrever mensagem…" autocomplete="off" maxlength="200">
+        <button type="submit">Enviar</button>
+      </form>
     </div>
   </div>
 </div>
@@ -879,8 +947,14 @@ const DB = {
   // localStorage) e o pedido de forçar um deles a assumir — ver "escolher o dispositivo
   // da recepção de longe" em iniciarRecepcao() e no /monitor
   recepcaoDispositivos: 'painel/recepcao_dispositivos',
-  recepcaoForcar: 'painel/recepcao_forcar'
+  recepcaoForcar: 'painel/recepcao_forcar',
+  // chat só entre os 4 consultórios (ver CONSULTORIOS_MSG); zerado por inteiro todo dia
+  // às 17h pelo Worker (ver scheduled() em src/worker.js)
+  msgsConsultorios: 'painel/msgs_consultorios'
 };
+
+// salas que têm o botão de mensagens (não aparece pras demais: odontologia, triagem...)
+const CONSULTORIOS_MSG = ["Consultório 01", "Consultório 02", "Consultório 03", "Consultório 04"];
 
 // Voz da recepção: PRINCIPAL é a Google Cloud TTS (masculina "Orus", Chirp 3 HD), gerada
 // pelo Worker em /tts (chave fica no Cloudflare). RESERVA, se o /tts falhar (cota do mês
@@ -1235,6 +1309,8 @@ function iniciarCaller(sala) {
     sairDaSala();
   };
 
+  if (CONSULTORIOS_MSG.includes(sala)) iniciarMensagensConsultorios(sala);
+
   // últimos chamados feitos por ESTA sala — usa o índice de "ts" que já existe, e
   // filtra por sala no cliente (evita precisar de outro índice novo no banco)
   const historicoSalaEl = document.getElementById('historicoSala');
@@ -1351,6 +1427,79 @@ function iniciarCaller(sala) {
   btnChamarEl.onclick = chamar;
   inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') chamar(); });
   vigiarVersao(() => true);
+}
+
+// chat só entre os 4 consultórios (ver CONSULTORIOS_MSG): mesmo canal pras 4 salas, sem
+// escolher destinatário. "Lido até" fica só no localStorage de cada tela (não tem
+// usuário/login aqui), por isso o contador de não lidas é por aparelho, não por sala.
+const MAX_MSGS = 40;
+function iniciarMensagensConsultorios(sala) {
+  const btnEl = document.getElementById('btnMsgs');
+  const badgeEl = document.getElementById('msgsBadge');
+  const overlayEl = document.getElementById('msgsOverlay');
+  const listaEl = document.getElementById('msgsLista');
+  const formEl = document.getElementById('msgsForm');
+  const inputEl = document.getElementById('msgsInput');
+  const fecharEl = document.getElementById('msgsFechar');
+  const chaveLido = 'painel_msgs_lido_' + slug(sala);
+  let lido = Number(localStorage.getItem(chaveLido)) || 0;
+  let msgs = [];
+
+  function renderLista() {
+    listaEl.innerHTML = msgs.length === 0
+      ? '<div class="msgs-vazio">Nenhuma mensagem ainda.</div>'
+      : msgs.map(m => {
+          const minha = m.de === sala;
+          return `<div class="msg-bolha ${minha ? 'minha' : ''}">` +
+            `<div class="msg-de">${escapeHtml(m.de)}</div>` +
+            `<div class="msg-texto">${escapeHtml(m.texto)}</div>` +
+            `<div class="msg-hora">${horaDe(m.ts)}</div>` +
+          `</div>`;
+        }).join('');
+    listaEl.scrollTop = listaEl.scrollHeight;
+  }
+  function atualizarBadge() {
+    const naoLidas = msgs.filter(m => m.de !== sala && m.ts > lido).length;
+    badgeEl.textContent = naoLidas > 9 ? '9+' : String(naoLidas);
+    badgeEl.hidden = naoLidas === 0;
+  }
+
+  const msgsRef = db.ref(DB.msgsConsultorios).orderByChild('ts').limitToLast(MAX_MSGS);
+  msgsRef.on('child_added', snap => {
+    const val = snap.val();
+    if (!val) return;
+    msgs.push({ key: snap.key, ...val });
+    msgs.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    if (!overlayEl.hidden) renderLista(); else atualizarBadge();
+  });
+  // mesma limpeza diária de 3 dias do Worker (ver DB.msgsConsultorios)
+  msgsRef.on('child_removed', snap => {
+    msgs = msgs.filter(m => m.key !== snap.key);
+    if (!overlayEl.hidden) renderLista();
+  });
+
+  function abrir() {
+    overlayEl.hidden = false;
+    renderLista();
+    lido = Date.now();
+    localStorage.setItem(chaveLido, String(lido));
+    atualizarBadge();
+    inputEl.focus();
+  }
+  function fechar() { overlayEl.hidden = true; }
+  btnEl.hidden = false;
+  btnEl.onclick = abrir;
+  fecharEl.onclick = fechar;
+  overlayEl.addEventListener('click', e => { if (e.target === overlayEl) fechar(); });
+  formEl.onsubmit = e => {
+    e.preventDefault();
+    const texto = inputEl.value.trim();
+    if (!texto) return;
+    db.ref(DB.msgsConsultorios).push({ de: sala, texto, ts: firebase.database.ServerValue.TIMESTAMP })
+      .catch(e => alert('Não consegui enviar a mensagem (' + e.message + '). Avise quem cuida do painel.'));
+    inputEl.value = '';
+    inputEl.focus();
+  };
 }
 
 // ---------------- painel da recepção ----------------
