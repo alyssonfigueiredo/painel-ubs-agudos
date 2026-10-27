@@ -396,9 +396,10 @@
     50% { box-shadow: 0 4px 28px rgba(255,107,107,0.65); }
   }
 
-  /* ---------- Outubro Rosa (tema sazonal) ----------
-     Entra e sai pela própria data da tela, em aplicarTemaSazonal(): durante outubro o
-     <html> ganha a classe tema-rosa; em 1 de novembro ela sai sozinha, sem deploy.
+  /* ---------- Outubro Rosa / Novembro Azul (temas sazonais) ----------
+     Entra e sai pela própria data da tela, em aplicarTemaSazonal() (ver
+     CAMPANHAS_SAZONAIS): durante outubro o <html> ganha a classe tema-rosa, durante
+     novembro ganha tema-azul; no mês seguinte ela sai sozinha, sem deploy.
      Só cores e a faixa da campanha: nenhuma regra de chamada, fila ou voz muda. */
   html.tema-rosa{
     --bg: #2a1420;
@@ -540,11 +541,135 @@
     margin-bottom: 20px;
   }
 
-  /* faixa da campanha: só aparece com o tema ligado */
+  /* Novembro Azul: mesmo "liquid glass" do Outubro Rosa acima, só trocando a paleta
+     pra azul — ver mock aprovado antes de portar aqui. */
+  html.tema-azul{
+    --bg: #0a1930;
+    --card: rgba(255,255,255,0.4);
+    --card-2: rgba(255,255,255,0.16);
+    --line: rgba(255,255,255,0.45);
+    --text: #fff;
+    --text-dim: rgba(255,255,255,0.72);
+    --coral: #5ec8ff;
+    --yellow: #7fd4ff;
+  }
+  html.tema-azul body {
+    background:
+      radial-gradient(circle at 15% 8%, rgba(41,121,255,0.25), transparent 35%),
+      radial-gradient(circle at 92% 18%, rgba(0,184,217,0.16), transparent 35%),
+      radial-gradient(circle at 25% 92%, rgba(84,125,255,0.18), transparent 35%),
+      radial-gradient(circle at 30% 15%, #163a63 0%, #11294a 55%, #0a1930 100%);
+  }
+  html.tema-azul .brand h1,
+  html.tema-azul .clock .time,
+  html.tema-azul .clock .date,
+  html.tema-azul .brand .sub2,
+  html.tema-azul .fc-t,
+  html.tema-azul .fc-s { text-shadow: 0 1px 3px rgba(0,0,0,0.35); }
+  html.tema-azul input[type=text] {
+    background: rgba(255,255,255,0.18);
+    border-color: rgba(255,255,255,0.4);
+  }
+  html.tema-azul .main-card,
+  html.tema-azul .history-item,
+  html.tema-azul .empty-hist,
+  html.tema-azul .picker-card,
+  html.tema-azul .card,
+  html.tema-azul .mon-card,
+  html.tema-azul .msgs-panel,
+  html.tema-azul .hist-tabela {
+    backdrop-filter: blur(22px) saturate(180%);
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
+    border: 1px solid rgba(255,255,255,0.7);
+    box-shadow: inset 0 1px 1px rgba(255,255,255,0.7), 0 16px 40px rgba(8,20,45,0.3);
+  }
+  html.tema-azul .main-card::before, html.tema-azul .card::before { opacity: 1; }
+  html.tema-azul .recepcao-btn button,
+  html.tema-azul button.primary,
+  html.tema-azul .msgs-compor button,
+  html.tema-azul #bloqAssumir {
+    background: #0d3b66;
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 16px;
+  }
+  html.tema-azul .msg-bolha.minha { background: #0d3b66; color: #fff; }
+  html.tema-azul .msg-bolha.minha .msg-hora { color: rgba(255,255,255,0.65); }
+  html.tema-azul .msgs-badge { background: #fff; color: #0a2a52; }
+  html.tema-azul .msgs-contato.ativo { background: #0d3b66; color: #fff; border-color: rgba(255,255,255,0.25); }
+  html.tema-azul .chip.ativo { color: #fff; }
+  html.tema-azul .main-card { display: flex; flex-direction: column; }
+  html.tema-azul .call-room { margin-top: auto; padding-top: 24px; }
+  html.tema-azul .bar { display: none; }
+  html.tema-azul .repetir-btn,
+  html.tema-azul .operador { display: none; }
+  html.tema-azul .sub {
+    color: #fff;
+    text-align: center;
+    padding-bottom: 14px;
+    margin-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  html.tema-azul .card h1 {
+    font-size: 34px;
+    margin: 0 0 4px;
+    text-align: center;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  }
+  html.tema-azul .rodape-sala { display: none; }
+  html.tema-azul .room {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 6px 18px;
+    background: rgba(255,255,255,0.6);
+    border-radius: 999px;
+    color: #0a2a52;
+    font-weight: 800;
+    font-size: 30px;
+  }
+  html.tema-azul .brasao img { filter: drop-shadow(0 4px 10px rgba(10,30,60,0.35)); }
+  html.tema-azul .repetir-btn,
+  html.tema-azul .trocar-btn,
+  html.tema-azul .operador button,
+  html.tema-azul .mon-btn,
+  html.tema-azul .chip {
+    background: rgba(255,255,255,0.4);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 999px;
+  }
+  html.tema-azul .sala-btn {
+    background: rgba(255,255,255,0.14);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius: 16px;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  }
+  html.tema-azul #overlay, html.tema-azul #bloqueado { background: rgba(10,25,48,0.94); color: #fff; }
+  html.tema-azul #overlay p, html.tema-azul #bloqueado p { color: #d7e8f3; }
+  html.tema-azul #bloqueado h2 { color: #9fd8ff; }
+  html.tema-azul #bloqSair { background: rgba(255,255,255,0.12); color: #fff; }
+  html.tema-azul #diagnostico { color: #1565c0; }
+  html.tema-azul #view-picker header {
+    justify-content: center;
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-bottom: 20px;
+  }
+  html.tema-azul #view-picker .clock { display: none; }
+  html.tema-azul #view-picker .brasao { height: 56px; }
+  html.tema-azul #view-picker .recepcao-btn {
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-bottom: 20px;
+  }
+
+  /* faixa da campanha: só aparece com o tema ligado; a cor muda por campanha, o
+     resto (layout, posição) é igual pros dois temas */
   .faixa-campanha { display: none; }
-  html.tema-rosa .faixa-campanha {
+  html.tema-rosa .faixa-campanha,
+  html.tema-azul .faixa-campanha {
     display: flex; align-items: center; justify-content: center; gap: 22px;
-    background: linear-gradient(90deg, #6b1a3f, #8a2a56 55%, #a8456e);
     color: #fff; padding: 16px 24px;
     margin: 16px 16px 0;
     border-radius: 22px;
@@ -553,11 +678,15 @@
     -webkit-backdrop-filter: blur(20px) saturate(180%);
     box-shadow: inset 0 1.5px 2px rgba(255,255,255,0.5), 0 14px 32px rgba(0,0,0,0.25);
   }
+  html.tema-rosa .faixa-campanha { background: linear-gradient(90deg, #6b1a3f, #8a2a56 55%, #a8456e); }
+  html.tema-azul .faixa-campanha { background: linear-gradient(90deg, #0d3b66, #145a9e 55%, #1f7fc7); }
   .faixa-campanha svg { flex: none; }
   /* a tela do consultório centraliza o card com flex, então lá a faixa vai fixa no topo
      (senão ela entra como item do flex e fica ao lado do card) */
-  html.tema-rosa #view-caller .faixa-campanha { position: fixed; top: 16px; left: 16px; right: 16px; margin: 0; z-index: 2; }
-  html.tema-rosa #view-caller.active { padding: 112px 0 24px; }
+  html.tema-rosa #view-caller .faixa-campanha,
+  html.tema-azul #view-caller .faixa-campanha { position: fixed; top: 16px; left: 16px; right: 16px; margin: 0; z-index: 2; }
+  html.tema-rosa #view-caller.active,
+  html.tema-azul #view-caller.active { padding: 112px 0 24px; }
   .faixa-campanha .fc-t {
     font-family: 'Manrope', Arial, sans-serif; font-weight: 800;
     font-size: 30px; letter-spacing: 0.14em; line-height: 1;
@@ -585,7 +714,8 @@
     .history-item .nome { font-size: 30px; }
     .history-item .sala { font-size: 19px; }
     .operador { margin-top: 18px; padding-top: 14px; }
-    html.tema-rosa #view-caller.active { padding-top: 76px; }
+    html.tema-rosa #view-caller.active,
+    html.tema-azul #view-caller.active { padding-top: 76px; }
   }
 </style>
 </head>
@@ -1228,11 +1358,25 @@ function vigiarVersao(podeRecarregar) {
 }
 
 
-// tema sazonal: durante outubro o painel usa as cores da campanha (ver .tema-rosa no CSS).
-// Roda junto do relógio, então a virada de 31/10 para 1/11 acontece sozinha, sem deploy.
+// tema sazonal: em outubro e novembro o painel usa as cores da campanha do mês (ver
+// .tema-rosa e .tema-azul no CSS). Roda junto do relógio, então a virada de mês
+// acontece sozinha, sem deploy.
+const CAMPANHAS_SAZONAIS = {
+  9: { classe: 'tema-rosa', titulo: 'OUTUBRO ROSA', sub: 'Faça o autoexame. Procure a UBS.', aria: 'Campanha Outubro Rosa' },
+  10: { classe: 'tema-azul', titulo: 'NOVEMBRO AZUL', sub: 'Cuide da sua saúde. Faça o check-up.', aria: 'Campanha Novembro Azul' }
+};
 function aplicarTemaSazonal(agora) {
-  const outubro = (agora || new Date()).getMonth() === 9;
-  document.documentElement.classList.toggle('tema-rosa', outubro);
+  const campanha = CAMPANHAS_SAZONAIS[(agora || new Date()).getMonth()];
+  document.documentElement.classList.toggle('tema-rosa', campanha?.classe === 'tema-rosa');
+  document.documentElement.classList.toggle('tema-azul', campanha?.classe === 'tema-azul');
+  if (!campanha) return;
+  document.querySelectorAll('.faixa-campanha').forEach(el => {
+    el.setAttribute('aria-label', campanha.aria);
+    const titulo = el.querySelector('.fc-t');
+    const sub = el.querySelector('.fc-s');
+    if (titulo) titulo.textContent = campanha.titulo;
+    if (sub) sub.textContent = campanha.sub;
+  });
 }
 // relógio do cabeçalho (TV e tela de escolha de sala)
 function atualizarRelogio() {
