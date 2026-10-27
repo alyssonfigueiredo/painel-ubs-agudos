@@ -119,17 +119,17 @@ aqui para ativar o som" volta a aparecer na TV.
 Resolve com um clique na tela da TV, ou liberando Som (e Reprodução automática, no Edge)
 nas permissões do site, no cadeado ao lado do endereço.
 
-## Tema de outubro (Outubro Rosa)
+## Temas sazonais (Outubro Rosa e Novembro Azul)
 
-Durante todo o mês de outubro o painel troca as cores para a campanha (fundo rosa claro,
-cards brancos, detalhes em rosa) e mostra uma faixa "OUTUBRO ROSA · Faça o autoexame.
-Procure a UBS." no topo da TV, dos consultórios e da tela de escolha de sala. Em 1 de
-novembro volta ao tema normal sozinho, sem deploy: quem decide é a data da própria tela
-(`aplicarTemaSazonal`, chamada junto do relógio).
+Em outubro e novembro o painel troca para as cores da campanha do mês ("liquid glass"
+escuro com manchas de cor — rosa em outubro, azul em novembro) e mostra uma faixa no
+topo da TV, dos consultórios e da tela de escolha de sala. No mês seguinte volta ao tema
+normal sozinho, sem deploy: quem decide é a data da própria tela (`aplicarTemaSazonal`,
+chamada junto do relógio, ver `CAMPANHAS_SAZONAIS` no index.html).
 
 São só cores e a faixa; nenhuma regra de chamada, fila, voz ou limpeza muda. Para trocar
-a frase, editar `.fc-s` no index.html (os três blocos `faixa-campanha`). O monitor e o
-histórico também ficam claros no mês, mas sem a faixa.
+a frase de uma campanha, editar `CAMPANHAS_SAZONAIS` no index.html (o texto é aplicado
+nos três blocos `faixa-campanha` por JS, não fica fixo no HTML).
 
 ## Privacidade
 
